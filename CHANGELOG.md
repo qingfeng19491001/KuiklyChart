@@ -1,0 +1,33 @@
+# Changelog
+
+## 1.2.1
+
+- 类别轴刻度优先展示 `ChartDataPoint.label` / `OhlcPoint.label`（柱状 / 条形 / 折线等）。
+- 交互事件始终注册，开关在回调内判断。
+- 饼图百分比标签归入 `PieChartAttr.showPercentLabel`。
+- 主题改为 `ChartThemeOptions` + `resolved()` 不可变快照；运行时改主题需重建节点。
+- `StockChart` 不再暴露系列图例配置。
+
+## 1.2.0
+
+- **折线 / 面积职责拆分**：`LineChart` 仅绘制折线与点；面积填充统一走 `AreaChart`（移除 `areaFill`）。
+- **单交互壳**：`StockChart` 与系列图共用 `CartesianInteractiveView`（手势 / Tooltip / 框选叠加）。
+- **柱状公开面收敛**：`StackedBarChart` / `HorizontalBarChart` 改为 `BarChart` 薄封装。
+- **饼 / 环收敛**：`DonutChart` 复用 `PieChart`（`ringWidth` / `centerText`）。
+- **手势默认回归组件风格**：默认全量视口；框选放大改为显式开启；移除库内操作提示文案。
+
+## 1.1.0
+
+- LineChart：平滑曲线、点标记配置；选中态保持系列色。
+- BarChart：单柱颜色、`stacked` / `horizontal` 变体。
+- 新增 `HorizontalBarChart`（条形图）、`StockChart`（K 线）。
+- 修复饼/环/散点/柱/线/雷达选中统一变蓝问题。
+- 雷达图：轴高亮、系列强调、Tooltip。
+- 手势：单指平移、双指捏合、长按框选放大、双击复位、十字准星。
+
+## 1.0.0
+
+- 提供 Line、Bar、Area、Scatter、StackedBar、Pie、Donut、Radar 八类图表。
+- 支持主题、响应式数据、选中、拖选、缩放、平移和视口重置。
+- 提供 Android、iOS、鸿蒙宿主 Demo。
+- 发布坐标：`com.tencent.kuiklybase:KuiklyChart:1.0.0-{kotlin}`。
