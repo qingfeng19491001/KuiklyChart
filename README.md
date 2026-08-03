@@ -198,7 +198,7 @@ override fun body(): ViewBuilder {
 
 图表数据必须由 `observableList` 持有，并通过 `() -> ObservableList<T>` 传给组件。
 
-运行 `androidApp`、`iosApp` 或 `ohosApp` 后进入默认 `router` 页面。Demo 覆盖折线 / 柱状 / 堆叠 / 条形 / 面积 / 饼 / 环 / 散点 / 雷达 / 股票等图表，以及视口手势、主题、实时数据和最小 API 用法。
+运行 `androidApp`、`iosApp` 或 `ohosApp` 后进入默认 `router` 页面。Demo 覆盖折线 / 柱状 / 条形 / 面积 / 饼  / 散点 / 雷达 / 股票等图表。
 
 ## License
 
