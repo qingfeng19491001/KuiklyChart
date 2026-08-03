@@ -2,6 +2,8 @@
 
 ## 1.2.1
 
+- 折线图支持点击空白取消选中、多系列同 X 聚合 Tooltip 与 `tooltip { formatter { ... } }` 格式化 DSL。
+- 折线图变体统一开启点按、平移、缩放、双击复位、长按框选与十字准星交互。
 - 类别轴刻度优先展示 `ChartDataPoint.label` / `OhlcPoint.label`（柱状 / 条形 / 折线等）。
 - 交互事件始终注册，开关在回调内判断。
 - 饼图百分比标签归入 `PieChartAttr.showPercentLabel`。
