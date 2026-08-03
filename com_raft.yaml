@@ -1,0 +1,16 @@
+name: KuiklyChart
+displayName: "KuiklyChart 图表组件"
+version: 1.2.1
+apiVersion: npm/v1
+platform: kuikly
+summary: "基于 KuiklyUI 的跨平台图表组件库，支持 Android、iOS、鸿蒙多端运行"
+description: "KuiklyChart 提供折线、柱状、面积、散点、饼/环、雷达、股票 K 线等图表，并支持主题、响应式数据与手势交互。"
+team: "Kuikly"
+kotlin: 2.1.21
+kuiklyType: "Kuikly组件"
+kuiklyTarget:
+  - android
+  - iOS
+  - ohosNative
+owner:
+  - yukiykchen
