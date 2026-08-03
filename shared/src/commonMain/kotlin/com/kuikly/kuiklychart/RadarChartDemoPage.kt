@@ -17,12 +17,15 @@ internal class RadarChartDemoPage : BasePager() {
 
     override fun body(): ViewBuilder {
         val ctx = this
-        return chartDemoBody(ctx, "RadarChart Demo") {
+        return chartDemoBody(ctx, "RadarChart") {
             RadarChart({ ctx.radarSeries }) {
                 attr {
                     flex(1f)
                     title = "能力评估（点选高亮 + Tooltip）"
-                    legend { show = true }
+                    legend {
+                        show = true
+                        interactive = true
+                    }
                     dimensions {
                         dimension("销售", 100f)
                         dimension("管理", 100f)

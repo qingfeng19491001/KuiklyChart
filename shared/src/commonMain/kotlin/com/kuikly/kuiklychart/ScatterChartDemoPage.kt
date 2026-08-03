@@ -17,7 +17,7 @@ internal class ScatterChartDemoPage : BasePager() {
 
     override fun body(): ViewBuilder {
         val ctx = this
-        return chartDemoBody(ctx, "ScatterChart Demo") {
+        return chartDemoBody(ctx, "ScatterChart") {
             ScatterChart({ ctx.scatterSeries }) {
                 attr {
                     flex(1f)
@@ -26,6 +26,7 @@ internal class ScatterChartDemoPage : BasePager() {
                     yAxis { show = true }
                     grid { show = true }
                     pointRadius = 6f
+                    legend { show = false }
                 }
             }
         }

@@ -60,7 +60,7 @@ internal class RealtimeDemoPage : BasePager() {
 
     override fun body(): ViewBuilder {
         val ctx = this
-        return chartDemoBody(ctx, "Realtime Demo") {
+        return chartDemoBody(ctx, "Realtime") {
             LineChart({ ctx.realtimeSeries }) {
                 attr {
                     flex(1f)

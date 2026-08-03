@@ -30,19 +30,13 @@ internal class RouterPage : BasePager() {
 
     private val routes = listOf(
         DemoRoute("line_chart_demo", "📈 折线图 Demo", 0xFF4F8FFF, 0xFF6C5CE7, 220f),
-        DemoRoute("bar_chart_demo", "📊 柱状图 Demo", 0xFF6C5CE7, 0xFFA29BFE, 220f),
-        DemoRoute("stacked_bar_chart_demo", "📚 堆叠柱状图 Demo", 0xFFF39C12, 0xFFF1C40F, 260f),
-        DemoRoute("horizontal_bar_chart_demo", "📶 条形图 Demo", 0xFF00CEC9, 0xFF81ECEC, 220f),
+        DemoRoute("bar_chart_demo", "📊 柱状图 Demo", 0xFF6C5CE7, 0xFFA29BFE, 240f),
         DemoRoute("area_chart_demo", "🌊 面积图 Demo", 0xFF00B894, 0xFF00CEC9, 220f),
-        DemoRoute("pie_chart_demo", "🥧 饼图 Demo", 0xFFE17055, 0xFFD63031, 220f),
-        DemoRoute("donut_chart_demo", "🍩 环形图 Demo", 0xFF0984E3, 0xFF74B9FF, 220f),
+        DemoRoute("pie_chart_demo", "🥧 饼图 Demo", 0xFFE17055, 0xFFD63031, 240f),
         DemoRoute("scatter_chart_demo", "✨ 散点图 Demo", 0xFF8E44AD, 0xFFE056FD, 220f),
         DemoRoute("radar_chart_demo", "🕸️ 雷达图 Demo", 0xFF16A085, 0xFF2ECC71, 220f),
-        DemoRoute("stock_chart_demo", "📉 股票图 Demo", 0xFFE74C3C, 0xFFF39C12, 220f),
-        DemoRoute("interaction_demo", "👆 视口手势综合 Demo", 0xFF2D98DA, 0xFF45AAF2, 280f),
-        DemoRoute("theme_demo", "🎨 主题配置 Demo", 0xFF8854D0, 0xFFA55EEA, 260f),
+        DemoRoute("stock_chart_demo", "📉 股票图 Demo", 0xFFE74C3C, 0xFFF39C12, 240f),
         DemoRoute("realtime_demo", "⚡ 实时数据 Demo", 0xFF20BF6B, 0xFF26DE81, 260f),
-        DemoRoute("api_usage_demo", "🧩 API 使用 Demo", 0xFFEB3B5A, 0xFFFC5C65, 260f),
     )
 
     override fun body(): ViewBuilder {
@@ -269,7 +263,7 @@ internal class RouterPage : BasePager() {
         const val CACHE_KEY = "router_last_input_key2"
         const val LOGO = "https://vfiles.gtimg.cn/wuji_dashboard/wupload/xy/starter/62394e19.png"
         const val JUMP_TEXT = "跳转"
-        const val TITLE = "KuiklyChart"
+        const val TITLE = "Kuikly页面路由"
         private const val AAR_MODE_TIP = "如：router 或者 router&key=value （&后面为页面参数）"
     }
 }
