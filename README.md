@@ -1,7 +1,8 @@
 # KuiklyChart
 
 基于 [KuiklyUI](https://github.com/Tencent-TDS/KuiklyUI) 跨端框架构建的图表 UI 组件库，支持 Android、iOS、鸿蒙多端运行。
-![img_1.png](img_1.png)
+<img width="300" height="650" alt="054f6a848395a35981202b6f8ef408bc" src="https://github.com/user-attachments/assets/d316f34e-c8db-41a3-a509-632076af6c5c" />
+
 
 ## 接入
 
