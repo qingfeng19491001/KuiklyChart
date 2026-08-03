@@ -6,10 +6,16 @@ class ChartAxisConfig {
 
 class ChartGridConfig {
     var show: Boolean = true
+    var color: Long = 0xFFF0F0F0
 }
 
 class ChartLegendConfig {
     var show: Boolean = true
+    /**
+     * 是否允许点击图例切换系列显隐。仅 SeriesCartesianChartAttr 系列生效；
+     * 组件内部维护隐藏集合，不会修改调用方传入的 seriesProvider。
+     */
+    var interactive: Boolean = false
 }
 
 class ChartLabelConfig {
@@ -17,15 +23,47 @@ class ChartLabelConfig {
 }
 
 /**
- * DSL 可变主题配置（对齐 ChatUI `ChatThemeOptions`）。
+ * 阈值参考线：在 Y = value 处绘制一条水平虚线及可选标签，用于强调阈值/均值/警戒线。
+ */
+class ChartThresholdConfig(
+    var value: Float,
+    var label: String = "",
+    var color: Long = 0xFFFAAD14,
+    var dashWidth: Float = 4f,
+    var showLabel: Boolean = true,
+)
+
+/**
+ * 文本注释：固定坐标 (dataX, dataY) 处渲染一段文案，可选辅助点、连线、引线偏移。
+ *
+ * - [text]            注释内容
+ * - [dataX]/[dataY]   数据坐标系锚点
+ * - [dx]/[dy]         像素级文本偏移（正方向：右/下）
+ * - [connector]       是否绘制从锚点到文本的连接线
+ * - [anchorPoint]     是否绘制锚点小圆点
+ */
+class ChartAnnotationConfig(
+    var text: String,
+    var dataX: Float,
+    var dataY: Float,
+    var dx: Float = 0f,
+    var dy: Float = 0f,
+    var color: Long = 0xFF2C3542,
+    var fontSize: Float = 11f,
+    var connector: Boolean = false,
+    var anchorPoint: Boolean = true,
+    var connectorColor: Long = 0xFF2C3542,
+)
+
+/** DSL 可变主题配置。
  * 渲染请使用 [resolved] 得到不可变快照；运行时改字段需重建图表节点。
  */
 class ChartThemeOptions {
     /** 强调色（雷达选中轴高亮等）。 */
-    var primaryColor: Long = 0xFF4F8FFF
-    var axisColor: Long = 0xFF999999
-    var gridColor: Long = 0xFFE5EAF2
-    var textColor: Long = 0xFF333333
+    var primaryColor: Long = 0xFF1677FF
+    var axisColor: Long = 0xFFBFBFBF
+    var gridColor: Long = 0xFFF0F0F0
+    var textColor: Long = 0xFF262626
     var backgroundColor: Long = 0xFFFFFFFF
     var fontSize: Float = 11f
     var lineWidth: Float = 2f
@@ -49,10 +87,10 @@ class ChartThemeOptions {
 
 /** 渲染用不可变主题快照。 */
 data class ChartTheme(
-    val primaryColor: Long = 0xFF4F8FFF,
-    val axisColor: Long = 0xFF999999,
-    val gridColor: Long = 0xFFE5EAF2,
-    val textColor: Long = 0xFF333333,
+    val primaryColor: Long = 0xFF1677FF,
+    val axisColor: Long = 0xFFBFBFBF,
+    val gridColor: Long = 0xFFF0F0F0,
+    val textColor: Long = 0xFF262626,
     val backgroundColor: Long = 0xFFFFFFFF,
     val fontSize: Float = 11f,
     val lineWidth: Float = 2f,
@@ -63,22 +101,21 @@ data class ChartTheme(
 /**
  * 笛卡尔图交互。
  *
- * 默认：全量视口 + 点选 / 平移 / 捏合 / 双击复位。
- * 框选放大等进阶手势需显式开启（见 [enableDragSelect]）。
+ * 点选与 Tooltip 默认开启；平移、缩放、双击复位和框选均由具体图表按需显式开启。
  */
 class ChartInteractionConfig {
     var enableTap: Boolean = true
     /** 长按拖动框选；默认关闭，松手后是否缩放见 [brushZoom]。 */
     var enableDragSelect: Boolean = false
-    /** 双指捏合缩放；默认开启。 */
-    var enableScale: Boolean = true
-    /** 单指拖动平移；默认开启。 */
-    var enablePan: Boolean = true
-    /** 双击复位到初始窗口；默认开启。 */
-    var enableReset: Boolean = true
-    /** 选中/框选时绘制十字准星。 */
-    var enableCrosshair: Boolean = true
-    /** 框选结束是否缩放到 X 选区（对齐 Ant brushXFilter）。 */
+    /** 双指捏合缩放；适合时间序列、K 线和密集数据，默认关闭。 */
+    var enableScale: Boolean = false
+    /** 单指拖动平移；适合已缩放或局部窗口图表，默认关闭。 */
+    var enablePan: Boolean = false
+    /** 双击复位到初始窗口；应与平移或缩放配套开启，默认关闭。 */
+    var enableReset: Boolean = false
+    /** 选中/框选时绘制十字准星；仅供明确需要的分析场景开启，默认关闭。 */
+    var enableCrosshair: Boolean = false
+    /** 框选结束是否缩放到 X 选区。 */
     var brushZoom: Boolean = true
     /** 锁定 Y 轴，仅沿 X 平移/缩放（时间序列/K 线习惯）。 */
     var lockY: Boolean = false

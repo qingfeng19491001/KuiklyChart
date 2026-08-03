@@ -31,13 +31,17 @@ class RadarChartView(
     private var tooltipX by observable(0f)
     private var tooltipY by observable(0f)
     private var showTooltip by observable(false)
+    private var hiddenSeriesNames by observable(emptySet<String>())
+
+    private fun visibleSeries(): List<RadarSeries> =
+        seriesProvider().filterNot { hiddenSeriesNames.contains(it.name) }
 
     override fun createAttr() = RadarChartAttr()
 
     override fun createEvent() = RadarChartEvent()
 
     override fun drawPolar(context: ContextApi, width: Float, height: Float) {
-        val series = seriesProvider().toList()
+        val series = visibleSeries()
         val dimensions = attr.dimensions
         val radius = minOf(width, height) * 0.35f
         val cx = width / 2f
@@ -49,7 +53,7 @@ class RadarChartView(
     }
 
     override fun onCanvasClick(x: Float, y: Float) {
-        val series = seriesProvider().toList()
+        val series = visibleSeries()
         val dimensions = attr.dimensions
         if (series.isEmpty() || dimensions.isEmpty() || canvasWidth <= 0f) return
         val radius = minOf(canvasWidth, canvasHeight) * 0.35f
@@ -89,6 +93,14 @@ class RadarChartView(
                                 flexDirection(FlexDirection.ROW)
                                 alignItems(FlexAlign.CENTER)
                                 marginRight(12f)
+                                marginBottom(4f)
+                                if (ctx.attr.legend.interactive) {
+                                    val hidden = ctx.hiddenSeriesNames.contains(s.name)
+                                    padding(4f, 8f, 4f, 4f)
+                                    borderRadius(4f)
+                                    backgroundColor(Color(if (hidden) 0xFFE5E7EB else 0xFFF5F6FA))
+                                    opacity(if (hidden) 0.45f else 1f)
+                                }
                             }
                             View {
                                 attr {
@@ -105,11 +117,27 @@ class RadarChartView(
                                     color(ctx.attr.theme.textColor.toChartColor())
                                 }
                             }
+                            if (ctx.attr.legend.interactive) {
+                                event {
+                                    click { ctx.toggleSeries(s.name) }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun toggleSeries(name: String) {
+        hiddenSeriesNames = if (hiddenSeriesNames.contains(name)) {
+            hiddenSeriesNames - name
+        } else {
+            hiddenSeriesNames + name
+        }
+        selection = null
+        showTooltip = false
+        event.onSelectionChange?.invoke(null)
     }
 
     override fun renderOverlay(parent: ViewContainer<*, *>) {
@@ -121,7 +149,7 @@ class RadarChartView(
                         positionAbsolute()
                         left(ctx.tooltipX)
                         top(ctx.tooltipY)
-                        backgroundColor(Color(0xEE333333))
+                        backgroundColor(Color(0xD9000000))
                         borderRadius(4f)
                         padding(6f, 8f, 6f, 8f)
                     }

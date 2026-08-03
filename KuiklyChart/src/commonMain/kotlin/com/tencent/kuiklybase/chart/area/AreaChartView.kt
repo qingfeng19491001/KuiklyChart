@@ -4,6 +4,7 @@ import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.reactive.collection.ObservableList
 import com.tencent.kuikly.core.views.ContextApi
 import com.tencent.kuiklybase.chart.config.AreaChartAttr
+import com.tencent.kuiklybase.chart.config.AreaMode
 import com.tencent.kuiklybase.chart.core.ChartCanvasRenderer
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianChartView
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianLayout
@@ -36,6 +37,7 @@ class AreaChartView(seriesProvider: () -> ObservableList<ChartSeries>) :
             smooth = attr.smooth,
             showPoints = attr.showPoints,
             pointRadius = attr.pointRadius,
+            mode = attr.mode,
         )
     }
 }

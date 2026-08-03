@@ -3,10 +3,15 @@ package com.tencent.kuiklybase.chart.core
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.views.ContextApi
 import com.tencent.kuikly.core.views.TextAlign
+import com.tencent.kuiklybase.chart.config.ChartAnnotationConfig
 import com.tencent.kuiklybase.chart.config.ChartTheme
+import com.tencent.kuiklybase.chart.config.ChartThresholdConfig
+import com.tencent.kuiklybase.chart.config.AreaMode
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianLayout
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianScale
+import com.tencent.kuiklybase.chart.core.cartesian.PlotRect
 import com.tencent.kuiklybase.chart.core.polar.PolarScale
+import com.tencent.kuiklybase.chart.model.ChartDataPoint
 import com.tencent.kuiklybase.chart.model.ChartSelection
 import com.tencent.kuiklybase.chart.model.ChartSeries
 import com.tencent.kuiklybase.chart.model.ChartSlice
@@ -21,6 +26,42 @@ import kotlin.math.sin
 
 /** 轴刻度：数据坐标 + 展示文案（类别轴优先用 [ChartDataPoint.label]）。 */
 internal data class AxisTick(val value: Float, val text: String)
+
+internal inline fun ContextApi.withPlotClip(plot: PlotRect, draw: () -> Unit) {
+    save()
+    beginPath()
+    moveTo(plot.left, plot.top)
+    lineTo(plot.right, plot.top)
+    lineTo(plot.right, plot.bottom)
+    lineTo(plot.left, plot.bottom)
+    closePath()
+    clipPathIntersect()
+    try {
+        draw()
+    } finally {
+        restore()
+    }
+}
+
+internal fun resolveAnnotationTextPosition(
+    desiredX: Float,
+    desiredBaselineY: Float,
+    textWidth: Float,
+    textAscent: Float,
+    textDescent: Float,
+    plot: PlotRect,
+    padding: Float = 2f,
+): Pair<Float, Float> {
+    val minX = plot.left + padding
+    val maxX = maxOf(minX, plot.right - textWidth.coerceAtLeast(0f) - padding)
+    val minBaselineY = plot.top + textAscent.coerceAtLeast(0f) + padding
+    val maxBaselineY = maxOf(
+        minBaselineY,
+        plot.bottom - textDescent.coerceAtLeast(0f) - padding,
+    )
+    return desiredX.coerceIn(minX, maxX) to
+        desiredBaselineY.coerceIn(minBaselineY, maxBaselineY)
+}
 
 internal object ChartCanvasRenderer {
     fun axisTicksFromSeries(series: List<ChartSeries>): List<AxisTick> {
@@ -124,11 +165,24 @@ internal object ChartCanvasRenderer {
         }
         if (showX) {
             ctx.textAlign(TextAlign.CENTER)
-            val ticks = resolveVisibleTicks(xTicks, viewport.xMin, viewport.xMax)
+            val maxTickCount = resolveDynamicXAxisTickCount(
+                availableWidth = plot.width,
+                labels = xTicks.orEmpty()
+                    .filter { it.value in minOf(viewport.xMin, viewport.xMax)..maxOf(viewport.xMin, viewport.xMax) }
+                    .map { it.text },
+                fontSize = theme.fontSize,
+            )
+            val ticks = resolveVisibleTicks(
+                xTicks,
+                viewport.xMin,
+                viewport.xMax,
+                maxCount = maxTickCount,
+            )
             if (ticks != null) {
                 ticks.forEach { tick ->
                     val x = scale.toPixelX(tick.value)
                     if (x in plot.left..plot.right) {
+                        ctx.textAlign(resolveXAxisTickTextAlign(x, plot))
                         ctx.fillText(tick.text, x, plot.bottom + theme.fontSize + 4f)
                     }
                 }
@@ -138,6 +192,7 @@ internal object ChartCanvasRenderer {
                     val ratio = i.toFloat() / (count - 1).coerceAtLeast(1)
                     val value = viewport.xMin + (viewport.xMax - viewport.xMin) * ratio
                     val x = scale.toPixelX(value)
+                    ctx.textAlign(resolveXAxisTickTextAlign(x, plot))
                     ctx.fillText(formatValue(value), x, plot.bottom + theme.fontSize + 4f)
                 }
             }
@@ -195,6 +250,225 @@ internal object ChartCanvasRenderer {
         }
     }
 
+    internal fun containsNonFinitePoint(series: List<ChartSeries>): Boolean =
+        series.any { item -> item.points.any { point -> !point.x.isFinite() || !point.y.isFinite() } }
+
+    internal fun lineSegments(
+        points: List<Pair<Float, Float>?>,
+        connectNulls: Boolean,
+    ): List<List<Pair<Float, Float>>> {
+        if (connectNulls) {
+            return points.filterNotNull().takeIf { it.isNotEmpty() }?.let(::listOf) ?: emptyList()
+        }
+        val segments = mutableListOf<List<Pair<Float, Float>>>()
+        var current = mutableListOf<Pair<Float, Float>>()
+        points.forEach { point ->
+            if (point == null) {
+                if (current.isNotEmpty()) {
+                    segments += current
+                    current = mutableListOf()
+                }
+            } else {
+                current += point
+            }
+        }
+        if (current.isNotEmpty()) segments += current
+        return segments
+    }
+
+    /**
+     * 增强版折线绘制：支持阈值参考线、缺失值断点、折线下方填充、文本注释。
+     * 渲染顺序：
+     *   1) 阈值参考线
+     *   2) 缺失值跳过
+     *   3) 折线下方填充（可选）
+     *   4) 折线主描边
+     *   5) 数据点标记
+     *   6) 文本注释（含可选连接线/锚点）
+     */
+    fun drawLineSeriesEnhanced(
+        ctx: ContextApi,
+        layout: CartesianLayout,
+        viewport: ChartViewport,
+        series: List<ChartSeries>,
+        theme: ChartTheme,
+        selection: ChartSelection?,
+        smooth: Boolean,
+        showPoints: Boolean,
+        pointRadius: Float,
+        connectNulls: Boolean,
+        fillBelow: Boolean,
+        thresholds: List<ChartThresholdConfig>,
+        annotations: List<ChartAnnotationConfig>,
+    ) {
+        val scale = CartesianScale(layout.plot, viewport)
+        val plot = layout.plot
+
+        thresholds.forEach { t ->
+            drawThreshold(ctx, scale, plot, theme, t)
+        }
+
+        series.forEachIndexed { sIdx, s ->
+            if (s.points.isEmpty()) return@forEachIndexed
+            val pixels = s.points.map { p ->
+                val px = if (!p.x.isFinite() || !p.y.isFinite()) null
+                else scale.toPixelX(p.x) to scale.toPixelY(p.y)
+                p to px
+            }
+            val baseColor = s.color.toChartColor()
+
+            if (fillBelow) {
+                drawLineFillBelow(ctx, plot, pixels, s.color, connectNulls)
+            }
+
+            ctx.beginPath()
+            ctx.strokeStyle(baseColor)
+            ctx.lineWidth(theme.lineWidth)
+            drawLinePath(ctx, pixels, smooth = smooth, connectNulls = connectNulls)
+            ctx.stroke()
+
+            if (showPoints) {
+                pixels.forEachIndexed { pIdx, entry ->
+                    val pos = entry.second ?: return@forEachIndexed
+                    val p = entry.first
+                    val selected = selection is ChartSelection.Cartesian &&
+                        selection.seriesIndex == sIdx && selection.itemIndex == pIdx
+                    val fill = p.resolveColor(s.color)
+                    drawMarker(
+                        ctx,
+                        pos.first,
+                        pos.second,
+                        fill,
+                        if (selected) pointRadius + 2f else pointRadius,
+                        selected,
+                    )
+                }
+            }
+        }
+
+        annotations.forEach { a ->
+            drawAnnotation(ctx, scale, plot, a)
+        }
+    }
+
+    /**
+     * 描绘折线主路径：缺失值断点由 [connectNulls] 控制；[smooth] 切换到三次贝塞尔。
+     */
+    private fun drawLinePath(
+        ctx: ContextApi,
+        pixels: List<Pair<ChartDataPoint, Pair<Float, Float>?>>,
+        smooth: Boolean,
+        connectNulls: Boolean,
+    ) {
+        lineSegments(pixels.map { it.second }, connectNulls).forEach { segment ->
+            if (smooth) {
+                pathThroughPoints(ctx, segment, smooth = true)
+            } else {
+                ctx.moveTo(segment.first().first, segment.first().second)
+                segment.drop(1).forEach { point -> ctx.lineTo(point.first, point.second) }
+            }
+        }
+    }
+
+    /**
+     * 描绘折线下方区域填充：缺失段自动断开成多个填充区域。
+     */
+    private fun drawLineFillBelow(
+        ctx: ContextApi,
+        plot: PlotRect,
+        pixels: List<Pair<ChartDataPoint, Pair<Float, Float>?>>,
+        seriesColor: Long,
+        connectNulls: Boolean,
+    ) {
+        lineSegments(pixels.map { it.second }, connectNulls).forEach { segment ->
+            if (segment.isEmpty()) return@forEach
+            ctx.beginPath()
+            ctx.moveTo(segment.first().first, plot.bottom)
+            segment.forEach { point -> ctx.lineTo(point.first, point.second) }
+            ctx.lineTo(segment.last().first, plot.bottom)
+            ctx.closePath()
+            val gradient = ctx.createLinearGradient(0f, plot.top, 0f, plot.bottom)
+            gradient.addColorStop(0f, Color(seriesColor.withAlpha(0xAA)))
+            gradient.addColorStop(1f, Color(seriesColor.withAlpha(0x05)))
+            ctx.fillStyle(gradient)
+            ctx.fill()
+        }
+    }
+
+    private fun drawThreshold(
+        ctx: ContextApi,
+        scale: CartesianScale,
+        plot: PlotRect,
+        theme: ChartTheme,
+        cfg: ChartThresholdConfig,
+    ) {
+        val y = scale.toPixelY(cfg.value)
+        if (y !in plot.top..plot.bottom) return
+        ctx.beginPath()
+        ctx.strokeStyle(cfg.color.toChartColor())
+        ctx.lineWidth(1f)
+        if (cfg.dashWidth > 0f) {
+            var x = plot.left
+            while (x < plot.right) {
+                val end = minOf(x + cfg.dashWidth, plot.right)
+                ctx.beginPath()
+                ctx.moveTo(x, y)
+                ctx.lineTo(end, y)
+                ctx.stroke()
+                x += cfg.dashWidth * 2f
+            }
+        } else {
+            ctx.moveTo(plot.left, y)
+            ctx.lineTo(plot.right, y)
+            ctx.stroke()
+        }
+        if (cfg.showLabel && cfg.label.isNotEmpty()) {
+            ctx.font(theme.fontSize)
+            ctx.fillStyle(cfg.color.toChartColor())
+            ctx.textAlign(TextAlign.LEFT)
+            ctx.fillText(cfg.label, plot.left + 4f, y - 3f)
+        }
+    }
+
+    private fun drawAnnotation(
+        ctx: ContextApi,
+        scale: CartesianScale,
+        plot: PlotRect,
+        cfg: ChartAnnotationConfig,
+    ) {
+        val ax = scale.toPixelX(cfg.dataX)
+        val ay = scale.toPixelY(cfg.dataY)
+        ctx.font(cfg.fontSize)
+        ctx.textAlign(TextAlign.LEFT)
+        val metrics = ctx.measureText(cfg.text)
+        val (tx, ty) = resolveAnnotationTextPosition(
+            desiredX = ax + cfg.dx,
+            desiredBaselineY = ay + cfg.dy,
+            textWidth = metrics.width,
+            textAscent = metrics.actualBoundingBoxAscent,
+            textDescent = metrics.actualBoundingBoxDescent,
+            plot = plot,
+        )
+
+        if (cfg.connector) {
+            ctx.beginPath()
+            ctx.strokeStyle(cfg.connectorColor.toChartColor())
+            ctx.lineWidth(1f)
+            ctx.moveTo(ax, ay)
+            ctx.lineTo(tx, ty)
+            ctx.stroke()
+        }
+        if (cfg.anchorPoint) {
+            ctx.beginPath()
+            ctx.fillStyle(cfg.connectorColor.toChartColor())
+            ctx.arc(ax, ay, 2.5f, 0f, (2 * PI).toFloat(), false)
+            ctx.fill()
+        }
+
+        ctx.fillStyle(cfg.color.toChartColor())
+        ctx.fillText(cfg.text, tx, ty)
+    }
+
     fun drawAreaSeries(
         ctx: ContextApi,
         layout: CartesianLayout,
@@ -206,24 +480,67 @@ internal object ChartCanvasRenderer {
         smooth: Boolean = false,
         showPoints: Boolean = false,
         pointRadius: Float = 4f,
+        mode: AreaMode = AreaMode.BASIC,
     ) {
+        if (mode == AreaMode.POLAR) {
+            drawPolarArea(ctx, layout, viewport, series, theme, selection)
+            return
+        }
+        if (mode == AreaMode.RANGE) {
+            drawRangeArea(ctx, layout, viewport, series, theme)
+            return
+        }
         val plot = layout.plot
         val scale = CartesianScale(plot, viewport)
+        val totals = if (mode == AreaMode.PERCENT_STACKED) {
+            val n = series.maxOfOrNull { it.points.size } ?: 0
+            (0 until n).map { i -> series.sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().coerceAtLeast(1e-6f) }
+        } else emptyList()
         series.forEachIndexed { sIdx, s ->
             if (s.points.isEmpty()) return@forEachIndexed
-            val pixels = s.points.map { scale.toPixelX(it.x) to scale.toPixelY(it.y) }
+            val stacked = mode == AreaMode.STACKED || mode == AreaMode.PERCENT_STACKED || mode == AreaMode.STREAM
+            val values = s.points.mapIndexed { i, p -> when (mode) {
+                    AreaMode.PERCENT_STACKED -> p.y / totals.getOrElse(i) { 1f } * 100f
+                    else -> p.y
+                }
+            }
+            val pixels = values.mapIndexed { i, value ->
+                val lower = if (stacked) {
+                    series.take(sIdx).sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().let {
+                        if (mode == AreaMode.PERCENT_STACKED) it / totals.getOrElse(i) { 1f } * 100f else it
+                    }
+                } else if (mode == AreaMode.STREAM) -values.maxOrNull().orZero() / 2f else 0f
+                scale.toPixelX(s.points[i].x) to scale.toPixelY(value + lower)
+            }
+            val basePixels = values.mapIndexed { i, _ ->
+                val lower = if (stacked) {
+                    series.take(sIdx).sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().let {
+                        if (mode == AreaMode.PERCENT_STACKED) it / totals.getOrElse(i) { 1f } * 100f else it
+                    }
+                } else if (mode == AreaMode.STREAM) -values.maxOrNull().orZero() / 2f else 0f
+                scale.toPixelX(s.points[i].x) to scale.toPixelY(lower)
+            }
             val color = s.color.toChartColor()
             ctx.beginPath()
             val first = pixels.first()
-            ctx.moveTo(first.first, plot.bottom)
-            if (smooth && pixels.size >= 2) {
+            ctx.moveTo(first.first, if (stacked) basePixels.first().second else plot.bottom)
+            if (mode == AreaMode.STEP) {
+                ctx.lineTo(pixels.first().first, pixels.first().second)
+                for (i in 1 until pixels.size) {
+                    ctx.lineTo(pixels[i].first, pixels[i - 1].second)
+                    ctx.lineTo(pixels[i].first, pixels[i].second)
+                }
+            } else if (smooth && pixels.size >= 2) {
                 ctx.lineTo(first.first, first.second)
                 pathThroughPoints(ctx, pixels, smooth = true, startFromIndex = 1)
             } else {
                 pixels.forEach { (px, py) -> ctx.lineTo(px, py) }
             }
             val last = pixels.last()
-            ctx.lineTo(last.first, plot.bottom)
+            ctx.lineTo(last.first, if (stacked) basePixels.last().second else plot.bottom)
+            if (stacked) {
+                for (i in basePixels.lastIndex - 1 downTo 0) ctx.lineTo(basePixels[i].first, basePixels[i].second)
+            }
             ctx.closePath()
             if (gradientFill) {
                 val gradient = ctx.createLinearGradient(0f, plot.top, 0f, plot.bottom)
@@ -237,7 +554,13 @@ internal object ChartCanvasRenderer {
             ctx.beginPath()
             ctx.strokeStyle(color)
             ctx.lineWidth(theme.lineWidth)
-            pathThroughPoints(ctx, pixels, smooth)
+            if (mode == AreaMode.STEP) {
+                ctx.moveTo(pixels.first().first, pixels.first().second)
+                for (i in 1 until pixels.size) {
+                    ctx.lineTo(pixels[i].first, pixels[i - 1].second)
+                    ctx.lineTo(pixels[i].first, pixels[i].second)
+                }
+            } else pathThroughPoints(ctx, pixels, smooth || mode == AreaMode.SPLINE)
             ctx.stroke()
             s.points.forEachIndexed { pIdx, p ->
                 val selected = selection is ChartSelection.Cartesian &&
@@ -249,6 +572,50 @@ internal object ChartCanvasRenderer {
                 }
             }
         }
+    }
+
+    private fun Float?.orZero(): Float = this ?: 0f
+
+    private fun drawPolarArea(
+        ctx: ContextApi, layout: CartesianLayout, viewport: ChartViewport,
+        series: List<ChartSeries>, theme: ChartTheme, selection: ChartSelection?,
+    ) {
+        val plot = layout.plot
+        val cx = (plot.left + plot.right) / 2f
+        val cy = (plot.top + plot.bottom) / 2f
+        val radius = min(plot.width, plot.height) * 0.38f
+        val values = series.firstOrNull()?.points.orEmpty()
+        val max = values.maxOfOrNull { it.y }?.coerceAtLeast(1f) ?: return
+        val step = (2 * PI).toFloat() / values.size.coerceAtLeast(1)
+        values.forEachIndexed { i, p ->
+            val a0 = -PI.toFloat() / 2f + i * step + 0.03f
+            val a1 = a0 + step - 0.06f
+            val r = radius * (p.y / max).coerceIn(0f, 1f)
+            ctx.beginPath(); ctx.moveTo(cx, cy)
+            ctx.lineTo(cx + r * cos(a0), cy + r * sin(a0))
+            ctx.arc(cx, cy, r, a0, a1, false); ctx.closePath()
+            ctx.fillStyle(Color(p.resolveColor(series.first().color).withAlpha(0xAA))); ctx.fill()
+            ctx.strokeStyle(theme.backgroundColor.toChartColor()); ctx.lineWidth(2f); ctx.stroke()
+        }
+    }
+
+    private fun drawRangeArea(
+        ctx: ContextApi, layout: CartesianLayout, viewport: ChartViewport,
+        series: List<ChartSeries>, theme: ChartTheme,
+    ) {
+        if (series.size < 2) return
+        val scale = CartesianScale(layout.plot, viewport)
+        val lower = series[0].points.map { scale.toPixelX(it.x) to scale.toPixelY(it.y) }
+        val upper = series[1].points.map { scale.toPixelX(it.x) to scale.toPixelY(it.y) }
+        if (lower.isEmpty() || upper.isEmpty()) return
+        ctx.beginPath(); ctx.moveTo(lower.first().first, lower.first().second)
+        lower.drop(1).forEach { ctx.lineTo(it.first, it.second) }
+        upper.asReversed().forEach { ctx.lineTo(it.first, it.second) }
+        ctx.closePath(); ctx.fillStyle(Color(series[0].color.withAlpha(0x44))); ctx.fill()
+        ctx.beginPath(); lower.forEachIndexed { i, p -> if (i == 0) ctx.moveTo(p.first, p.second) else ctx.lineTo(p.first, p.second) }
+        ctx.strokeStyle(series[0].color.toChartColor()); ctx.lineWidth(theme.lineWidth); ctx.stroke()
+        ctx.beginPath(); upper.forEachIndexed { i, p -> if (i == 0) ctx.moveTo(p.first, p.second) else ctx.lineTo(p.first, p.second) }
+        ctx.strokeStyle(series[1].color.toChartColor()); ctx.lineWidth(theme.lineWidth); ctx.stroke()
     }
 
     fun drawBarSeries(
@@ -732,3 +1099,29 @@ internal object ChartCanvasRenderer {
         fill()
     }
 }
+
+internal fun resolveXAxisTickTextAlign(x: Float, plot: PlotRect): TextAlign = when {
+    x <= plot.left + 0.5f -> TextAlign.LEFT
+    x >= plot.right - 0.5f -> TextAlign.RIGHT
+    else -> TextAlign.CENTER
+}
+
+internal fun resolveDynamicXAxisTickCount(
+    availableWidth: Float,
+    labels: List<String>,
+    fontSize: Float,
+    minimumGap: Float = 4f,
+): Int {
+    if (labels.isEmpty()) return 0
+    if (labels.size == 1) return 1
+    val estimatedLabelWidth = labels.maxOf { estimateAxisLabelWidth(it, fontSize) }
+        .coerceAtLeast(fontSize)
+    val slotWidth = estimatedLabelWidth + minimumGap
+    val countByWidth = (availableWidth.coerceAtLeast(0f) / slotWidth).toInt() + 1
+    return countByWidth.coerceIn(2, labels.size)
+}
+
+internal fun estimateAxisLabelWidth(text: String, fontSize: Float): Float =
+    text.fold(0f) { width, char ->
+        width + if (char.code <= 0x7F) fontSize * 0.5f else fontSize
+    }

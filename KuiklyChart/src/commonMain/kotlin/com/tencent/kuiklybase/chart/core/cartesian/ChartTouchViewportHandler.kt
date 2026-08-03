@@ -30,25 +30,16 @@ internal class ChartTouchViewportHandler(
 
     private enum class Mode { NONE, PAN, PINCH, BRUSH }
 
-    fun onTouch(params: TouchParams) {
-        // 部分宿主 action 为空：按回调入口拆分不可用时，用 touches 数兜底
-        val action = params.action.ifEmpty {
-            when {
-                params.touches.size >= 2 -> "touchMove"
-                else -> "touchMove"
-            }
-        }
-        when (action) {
-            "touchDown", "down" -> onDown(params)
-            "touchMove", "move" -> onMove(params)
-            "touchUp", "up", "touchCancel", "cancel" -> onUp(params)
-            else -> onMove(params)
-        }
-    }
+    fun onTouchDown(params: TouchParams) = onDown(params)
+
+    fun onTouchMove(params: TouchParams) = onMove(params)
+
+    fun onTouchUp(params: TouchParams) = onUp(params)
 
     /** Android 原生 pan：start/move/end。 */
     fun onNativePan(state: String, x: Float, y: Float) {
-        if (!interaction.enablePan) return
+        // 框选由 longPress 武装后继续复用 pan 坐标；它不应依赖普通平移开关。
+        if (!interaction.enablePan && mode != Mode.BRUSH) return
         if (mode == Mode.PINCH) return
         val controller = controllerProvider() ?: return
         val scale = scaleProvider()

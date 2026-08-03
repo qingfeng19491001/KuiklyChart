@@ -59,20 +59,39 @@ internal object CartesianHitTester {
         x: Float,
         y: Float,
         threshold: Float = 28f,
+        stacked: Boolean = false,
+        grouped: Boolean = true,
     ): HitResult? {
         if (series.isEmpty()) return null
         var best: HitResult? = null
         var bestScore = Float.POSITIVE_INFINITY
+        val stackBases = mutableMapOf<Int, Float>()
+        val categories = series.first().points.size.coerceAtLeast(1)
+        val groupWidth = scale.plot.width / categories
+        val barWidth = groupWidth * 0.7f / series.size.coerceAtLeast(1)
         series.forEachIndexed { sIdx, s ->
             s.points.forEachIndexed { pIdx, p ->
                 val px = scale.toPixelX(p.x)
-                val top = scale.toPixelY(p.y)
-                val bottom = scale.toPixelY(0f)
-                val midY = (top + bottom) / 2f
-                val dx = abs(px - x)
+                val base = if (stacked) stackBases[pIdx] ?: 0f else 0f
+                val end = base + p.y
+                if (stacked) stackBases[pIdx] = end
+                val top = scale.toPixelY(end)
+                val bottom = scale.toPixelY(base)
+                val barLeft = if (stacked) {
+                    px - groupWidth * 0.3f
+                } else if (grouped) {
+                    px - groupWidth * 0.35f + barWidth * sIdx + groupWidth * 0.15f / series.size
+                } else {
+                    px - barWidth / 2f
+                }
+                val barRight = if (stacked) px + groupWidth * 0.3f else barLeft + if (grouped) barWidth else barWidth
+                val dx = when {
+                    x in barLeft..barRight -> 0f
+                    else -> minOf(abs(x - barLeft), abs(x - barRight))
+                }
                 if (dx > threshold) return@forEachIndexed
-                val dy = if (y in minOf(top, bottom)..maxOf(top, bottom)) 0f else abs(midY - y)
-                val score = dx + dy * 0.5f
+                if (y !in minOf(top, bottom)..maxOf(top, bottom)) return@forEachIndexed
+                val score = dx
                 if (score < bestScore) {
                     bestScore = score
                     best = HitResult(sIdx, pIdx)
@@ -89,20 +108,24 @@ internal object CartesianHitTester {
         x: Float,
         y: Float,
         threshold: Float = 28f,
+        stacked: Boolean = false,
     ): HitResult? {
         if (series.isEmpty()) return null
         var best: HitResult? = null
         var bestScore = Float.POSITIVE_INFINITY
+        val stackBases = mutableMapOf<Int, Float>()
         series.forEachIndexed { sIdx, s ->
             s.points.forEachIndexed { pIdx, p ->
                 val py = scale.toPixelY(p.x)
-                val left = scale.toPixelX(0f)
-                val right = scale.toPixelX(p.y)
-                val midX = (left + right) / 2f
+                val base = if (stacked) stackBases[pIdx] ?: 0f else 0f
+                val end = base + p.y
+                if (stacked) stackBases[pIdx] = end
+                val left = scale.toPixelX(base)
+                val right = scale.toPixelX(end)
                 val dy = abs(py - y)
                 if (dy > threshold) return@forEachIndexed
-                val dx = if (x in minOf(left, right)..maxOf(left, right)) 0f else abs(midX - x)
-                val score = dy + dx * 0.5f
+                if (x !in minOf(left, right)..maxOf(left, right)) return@forEachIndexed
+                val score = dy
                 if (score < bestScore) {
                     bestScore = score
                     best = HitResult(sIdx, pIdx)

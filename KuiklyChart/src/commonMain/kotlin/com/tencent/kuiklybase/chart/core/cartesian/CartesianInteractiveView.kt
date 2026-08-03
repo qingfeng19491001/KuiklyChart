@@ -40,6 +40,7 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
     protected var tooltipText by observable("")
     protected var tooltipX by observable(0f)
     protected var tooltipY by observable(0f)
+    protected var tooltipWidth by observable(0f)
     protected var showTooltip by observable(false)
     protected var canvasWidth by observable(0f)
     protected var canvasHeight by observable(0f)
@@ -80,6 +81,15 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
         bindGestureController()
         event.onViewportChange?.invoke(viewport)
         event.onSelectionChange?.invoke(null)
+    }
+
+    protected fun clearSelection() {
+        val hadSelection = selection != null || showTooltip
+        selection = null
+        showTooltip = false
+        crosshairX = null
+        crosshairY = null
+        if (hadSelection) event.onSelectionChange?.invoke(null)
     }
 
     protected open fun onBeforeResetViewport() {}
@@ -133,7 +143,17 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
         crossY: Float? = null,
     ) {
         tooltipText = text
-        val tip = resolveTooltipPosition(canvasOffsetX, canvasOffsetY, localX, localY)
+        val anchorX = crossX ?: localX
+        val anchorY = crossY ?: localY
+        tooltipWidth = estimateTooltipWidth(text, canvasWidth)
+        val tip = resolveTooltipPosition(
+            canvasOffsetX = canvasOffsetX,
+            canvasOffsetY = canvasOffsetY,
+            localX = anchorX,
+            localY = anchorY,
+            containerWidth = canvasWidth,
+            tooltipWidth = tooltipWidth,
+        )
         tooltipX = tip.first
         tooltipY = tip.second
         showTooltip = true
@@ -198,19 +218,21 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                             }
                         }
                         pan { params ->
-                            if (!ctx.attr.interaction.enablePan) return@pan
+                            if (!ctx.attr.interaction.enablePan &&
+                                !ctx.attr.interaction.enableDragSelect
+                            ) return@pan
                             ctx.ensureGestureReady()
                             ctx.touchHandler?.onNativePan(params.state, params.x, params.y)
                         }
                         touchDown { params ->
                             ctx.ensureGestureReady()
-                            ctx.touchHandler?.onTouch(params)
+                            ctx.touchHandler?.onTouchDown(params)
                         }
                         touchMove { params ->
-                            ctx.touchHandler?.onTouch(params)
+                            ctx.touchHandler?.onTouchMove(params)
                         }
                         touchUp { params ->
-                            ctx.touchHandler?.onTouch(params)
+                            ctx.touchHandler?.onTouchUp(params)
                         }
                     }
                     Canvas({ attr { flex(1f) } }) { context, width, height ->
@@ -222,13 +244,18 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                         ctx.drawPlot(context, width, height, layout, currentViewport, ctx.selection)
                         CartesianOverlayRenderer.drawBrush(
                             context, layout, currentViewport, ctx.dragSelection,
+                            ctx.attr.theme.primaryColor,
                         )
+                        val selectedCrosshair = ctx.selectionCrosshair(layout, currentViewport)
+                        val crosshairX = if (ctx.selection != null) selectedCrosshair?.first else ctx.crosshairX
+                        val crosshairY = if (ctx.selection != null) selectedCrosshair?.second else ctx.crosshairY
                         CartesianOverlayRenderer.drawCrosshair(
                             context,
                             layout,
                             ctx.attr.interaction.enableCrosshair,
-                            ctx.crosshairX,
-                            ctx.crosshairY,
+                            crosshairX,
+                            crosshairY,
+                            ctx.attr.theme.primaryColor,
                         )
                     }
                 }
@@ -239,8 +266,9 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                             positionAbsolute()
                             left(ctx.tooltipX)
                             top(ctx.tooltipY)
-                            backgroundColor(Color(0xEE1F2A37))
+                            backgroundColor(Color(0xD9000000))
                             borderRadius(6f)
+                            width(ctx.tooltipWidth)
                             padding(8f, 10f, 8f, 10f)
                         }
                         Text {
@@ -258,6 +286,11 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
 
     /** 图例等画布下方内容；默认无。 */
     protected open fun renderBelowCanvas(parent: ViewContainer<*, *>) {}
+
+    protected open fun selectionCrosshair(
+        layout: CartesianLayout,
+        viewport: ChartViewport,
+    ): Pair<Float, Float>? = null
 
     protected abstract fun syncDataFromProvider()
 
@@ -279,6 +312,7 @@ internal object CartesianOverlayRenderer {
         layout: CartesianLayout,
         currentViewport: ChartViewport,
         range: ClosedFloatingPointRange<Float>?,
+        primaryColor: Long,
     ) {
         if (range == null) return
         val scale = CartesianScale(layout.plot, currentViewport)
@@ -309,10 +343,10 @@ internal object CartesianOverlayRenderer {
         context.lineTo(r, plot.bottom)
         context.lineTo(l, plot.bottom)
         context.closePath()
-        context.fillStyle(Color(0x334F8FFF))
+        context.fillStyle(Color(primaryColor.withAlpha(0x33)))
         context.fill()
         context.beginPath()
-        context.strokeStyle(Color(0xFF4F8FFF))
+        context.strokeStyle(Color(primaryColor.withAlpha(0xFF)))
         context.lineWidth(1.5f)
         context.moveTo(l, plot.top)
         context.lineTo(l, plot.bottom)
@@ -327,11 +361,12 @@ internal object CartesianOverlayRenderer {
         enabled: Boolean,
         cx: Float?,
         cy: Float?,
+        primaryColor: Long,
     ) {
         if (!enabled) return
         if (cx == null && cy == null) return
         val plot = layout.plot
-        context.strokeStyle(Color(0x994F8FFF))
+        context.strokeStyle(Color(primaryColor.withAlpha(0x99)))
         context.lineWidth(1f)
         if (cx != null) {
             val x = cx.coerceIn(plot.left, plot.right)
@@ -349,3 +384,6 @@ internal object CartesianOverlayRenderer {
         }
     }
 }
+
+private fun Long.withAlpha(alpha: Int): Long =
+    (this and 0x00FFFFFFL) or (alpha.toLong() shl 24)

@@ -1,6 +1,7 @@
 package com.tencent.kuiklybase.chart.pie
 
 import com.tencent.kuikly.core.base.ViewContainer
+import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.directives.vfor
 import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.layout.FlexAlign
@@ -27,6 +28,10 @@ class PieChartView(
 ) : PolarChartChromeView<PieChartAttr, PieChartEvent>() {
 
     var selection by observable<ChartSelection?>(null)
+    private var hiddenSliceLabels by observable(emptySet<String>())
+
+    private fun visibleSlices(): List<ChartSlice> =
+        filterVisibleSlices(sliceProvider().toList(), hiddenSliceLabels)
 
     override fun createAttr() = PieChartAttr()
 
@@ -41,7 +46,7 @@ class PieChartView(
     )
 
     override fun drawPolar(context: ContextApi, width: Float, height: Float) {
-        val slices = sliceProvider().toList()
+        val slices = visibleSlices()
         val layout = resolveLayout(width, height)
         val theme = attr.theme.resolved()
         ChartCanvasRenderer.drawPieSlices(
@@ -69,14 +74,15 @@ class PieChartView(
     }
 
     override fun onCanvasClick(x: Float, y: Float) {
-        val slices = sliceProvider().toList()
+        val slices = visibleSlices()
         if (slices.isEmpty() || canvasWidth <= 0f) return
         val layout = resolveLayout(canvasWidth, canvasHeight)
         val idx = PolarHitTester.hitSlice(layout, slices, attr.startAngle, x, y) ?: return
         val slice = slices[idx]
         selection = ChartSelection.Slice(idx, slice.label)
         event.onSelectionChange?.invoke(selection)
-        event.onSliceClick?.invoke(slice, idx)
+        val sourceIndex = sliceProvider().indexOfFirst { it.label == slice.label }
+        event.onSliceClick?.invoke(slice, sourceIndex.takeIf { it >= 0 } ?: idx)
     }
 
     override fun renderLegend(parent: ViewContainer<*, *>) {
@@ -97,6 +103,14 @@ class PieChartView(
                                 flexDirection(FlexDirection.ROW)
                                 alignItems(FlexAlign.CENTER)
                                 marginRight(12f)
+                                marginBottom(4f)
+                                if (ctx.attr.legend.interactive) {
+                                    val hidden = ctx.hiddenSliceLabels.contains(slice.label)
+                                    padding(4f, 8f, 4f, 4f)
+                                    borderRadius(4f)
+                                    backgroundColor(Color(if (hidden) 0xFFE5E7EB else 0xFFF5F6FA))
+                                    opacity(if (hidden) 0.45f else 1f)
+                                }
                             }
                             View {
                                 attr {
@@ -113,13 +127,32 @@ class PieChartView(
                                     color(ctx.attr.theme.textColor.toChartColor())
                                 }
                             }
+                            if (ctx.attr.legend.interactive) {
+                                event {
+                                    click { ctx.toggleSlice(slice.label) }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+
+    private fun toggleSlice(label: String) {
+        hiddenSliceLabels = toggleHiddenPolarItem(hiddenSliceLabels, label)
+        selection = null
+        event.onSelectionChange?.invoke(null)
+    }
 }
+
+internal fun filterVisibleSlices(
+    slices: List<ChartSlice>,
+    hiddenLabels: Set<String>,
+): List<ChartSlice> = slices.filterNot { hiddenLabels.contains(it.label) }
+
+internal fun toggleHiddenPolarItem(hiddenLabels: Set<String>, label: String): Set<String> =
+    if (hiddenLabels.contains(label)) hiddenLabels - label else hiddenLabels + label
 
 fun ViewContainer<*, *>.PieChart(
     sliceProvider: () -> ObservableList<ChartSlice>,

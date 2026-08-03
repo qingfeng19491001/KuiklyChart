@@ -42,6 +42,7 @@ class BarChartView(seriesProvider: () -> ObservableList<ChartSeries>) :
     ) {
         useHorizontalHit = config.horizontal
         useCategoryHit = !config.horizontal
+        useStackedHit = config.stacked
         val theme = config.theme.resolved()
         ChartCanvasRenderer.drawGrid(context, layout, viewport, theme, config.grid.show)
         drawChartAxes(context, layout, viewport, series, horizontal = config.horizontal)

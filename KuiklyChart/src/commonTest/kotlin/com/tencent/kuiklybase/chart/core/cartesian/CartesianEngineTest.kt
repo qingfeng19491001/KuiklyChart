@@ -1,5 +1,10 @@
 package com.tencent.kuiklybase.chart.core.cartesian
 
+import com.tencent.kuikly.core.base.event.Touch
+import com.tencent.kuikly.core.base.event.TouchParams
+import com.tencent.kuikly.core.views.TextAlign
+import com.tencent.kuiklybase.chart.core.resolveDynamicXAxisTickCount
+import com.tencent.kuiklybase.chart.core.resolveXAxisTickTextAlign
 import com.tencent.kuiklybase.chart.model.ChartSeries
 import com.tencent.kuiklybase.chart.model.ChartViewport
 import com.tencent.kuiklybase.chart.model.ChartDataPoint
@@ -194,6 +199,63 @@ class CartesianEngineTest {
     }
 
     @Test
+    fun longPressBrushContinuesWhenNormalPanIsDisabled() {
+        val interaction = ChartInteractionConfig().apply {
+            enablePan = false
+            enableDragSelect = true
+            brushZoom = false
+            clampToData = false
+        }
+        val initial = ChartViewport(0f, 10f, 0f, 10f)
+        val controller = ChartGestureController(interaction, initial, initial) {}
+        var finished: ClosedFloatingPointRange<Float>? = null
+        val handler = ChartTouchViewportHandler(
+            interaction = interaction,
+            controllerProvider = { controller },
+            scaleProvider = { CartesianScale(PlotRect(0f, 0f, 100f, 100f), initial) },
+            onBrushRangeChanged = {},
+            onBrushFinished = { finished = it },
+            onCrosshair = { _, _ -> },
+        )
+
+        handler.beginBrush(20f)
+        handler.onNativePan("move", 80f, 50f)
+        handler.onNativePan("end", 80f, 50f)
+
+        val range = assertNotNull(finished)
+        assertEquals(2f, range.start)
+        assertEquals(8f, range.endInclusive)
+    }
+
+    @Test
+    fun explicitTouchLifecycleEndsAndRestartsPinchWithoutActionField() {
+        val interaction = ChartInteractionConfig().apply {
+            enableScale = true
+            clampToData = false
+        }
+        val initial = ChartViewport(0f, 10f, 0f, 10f)
+        val controller = ChartGestureController(interaction, initial, initial) {}
+        val plot = PlotRect(0f, 0f, 100f, 100f)
+        val handler = ChartTouchViewportHandler(
+            interaction = interaction,
+            controllerProvider = { controller },
+            scaleProvider = { CartesianScale(plot, controller.currentViewport()) },
+            onBrushRangeChanged = {},
+            onBrushFinished = {},
+            onCrosshair = { _, _ -> },
+        )
+
+        handler.onTouchDown(touchParams(40f, 60f))
+        handler.onTouchMove(touchParams(30f, 70f))
+        handler.onTouchUp(touchParams(30f))
+        assertEquals(5f, controller.currentViewport().xMax - controller.currentViewport().xMin)
+
+        handler.onTouchDown(touchParams(40f, 60f))
+        handler.onTouchMove(touchParams(40f, 60f))
+        assertEquals(5f, controller.currentViewport().xMax - controller.currentViewport().xMin)
+    }
+
+    @Test
     fun lockYKeepsVerticalRangeOnPinch() {
         val interaction = ChartInteractionConfig().apply {
             enableScale = true
@@ -225,6 +287,54 @@ class CartesianEngineTest {
         val tip = resolveTooltipPosition(12f, 34f, 50f, 80f)
         assertEquals(62f, tip.first)
         assertEquals(86f, tip.second)
+    }
+
+    @Test
+    fun tooltipPosition_flipsToLeftNearRightEdge() {
+        val tip = resolveTooltipPosition(
+            canvasOffsetX = 0f,
+            canvasOffsetY = 0f,
+            localX = 280f,
+            localY = 80f,
+            containerWidth = 300f,
+            tooltipWidth = 100f,
+        )
+        assertEquals(172f, tip.first)
+        assertEquals(52f, tip.second)
+    }
+
+    @Test
+    fun tooltipPosition_staysRightWhenSpaceAllows() {
+        val tip = resolveTooltipPosition(
+            canvasOffsetX = 0f,
+            canvasOffsetY = 0f,
+            localX = 40f,
+            localY = 80f,
+            containerWidth = 300f,
+            tooltipWidth = 100f,
+        )
+        assertEquals(48f, tip.first)
+    }
+
+    @Test
+    fun xAxisTickAlignment_keepsEdgeLabelsInsideCanvas() {
+        val plot = PlotRect(40f, 8f, 288f, 180f)
+        assertEquals(TextAlign.LEFT, resolveXAxisTickTextAlign(40f, plot))
+        assertEquals(TextAlign.CENTER, resolveXAxisTickTextAlign(160f, plot))
+        assertEquals(TextAlign.RIGHT, resolveXAxisTickTextAlign(288f, plot))
+    }
+
+    @Test
+    fun dynamicXAxisTickCount_keepsShortLabelsWhenTheyFit() {
+        val labels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
+        assertEquals(7, resolveDynamicXAxisTickCount(248f, labels, 12f))
+    }
+
+    @Test
+    fun dynamicXAxisTickCount_samplesLongLabelsWhenSpaceIsLimited() {
+        val labels = List(8) { index -> "2026-08-${index + 1}" }
+        val count = resolveDynamicXAxisTickCount(248f, labels, 12f)
+        assertTrue(count in 2 until labels.size)
     }
 
     @Test
@@ -293,5 +403,144 @@ class CartesianEngineTest {
         val hit = CartesianHitTester.nearestPoint(series, scale, 100f, 0f, threshold = 20f)
         assertNotNull(hit)
         assertEquals(1, hit.pointIndex)
+    }
+
+    @Test
+    fun selectedPointCrosshair_recomputesAfterViewportChanges() {
+        val series = listOf(
+            ChartSeries("趋势", listOf(ChartDataPoint("中点", 5f, 50f)), 0L),
+        )
+        val plot = PlotRect(40f, 10f, 240f, 210f)
+        val selection = com.tencent.kuiklybase.chart.model.ChartSelection.Cartesian(0, 0, "中点")
+
+        val full = resolveCartesianSelectionCrosshair(
+            series, selection, plot, ChartViewport(0f, 10f, 0f, 100f),
+        )
+        val zoomed = resolveCartesianSelectionCrosshair(
+            series, selection, plot, ChartViewport(4f, 8f, 0f, 100f),
+        )
+
+        assertEquals(140f, full?.first)
+        assertEquals(90f, zoomed?.first)
+        assertEquals(110f, zoomed?.second)
+    }
+
+    @Test
+    fun selectedPointCrosshair_hidesWhenPointLeavesPlot() {
+        val series = listOf(
+            ChartSeries("trend", listOf(ChartDataPoint("start", 1f, 50f)), 0L),
+        )
+        val crosshair = resolveCartesianSelectionCrosshair(
+            series,
+            com.tencent.kuiklybase.chart.model.ChartSelection.Cartesian(0, 0, "start"),
+            PlotRect(40f, 10f, 240f, 210f),
+            ChartViewport(4f, 8f, 0f, 100f),
+        )
+
+        assertEquals(null, crosshair)
+    }
+
+    @Test
+    fun stackedBarHitTester_selectsActualStackSegment() {
+        val series = listOf(
+            ChartSeries("bottom", listOf(ChartDataPoint("A", 0f, 40f)), 0L),
+            ChartSeries("top", listOf(ChartDataPoint("A", 0f, 60f)), 0L),
+        )
+        val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(-1f, 1f, 0f, 100f))
+
+        val hit = CartesianHitTester.nearestBar(
+            series,
+            scale,
+            x = 50f,
+            y = 20f,
+            stacked = true,
+        )
+
+        assertNotNull(hit)
+        assertEquals(1, hit.seriesIndex)
+    }
+
+    @Test
+    fun groupedBarHitTester_selectsSecondSeriesBar() {
+        val series = listOf(
+            ChartSeries("direct", listOf(ChartDataPoint("A", 0f, 40f)), 0L),
+            ChartSeries("partner", listOf(ChartDataPoint("A", 0f, 60f)), 0L),
+        )
+        val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(-1f, 1f, 0f, 100f))
+
+        val hit = CartesianHitTester.nearestBar(series, scale, x = 27f, y = 30f, grouped = true)
+
+        assertNotNull(hit)
+        assertEquals(1, hit.seriesIndex)
+    }
+
+    @Test
+    fun stackedHorizontalBarHitTester_selectsActualStackSegment() {
+        val series = listOf(
+            ChartSeries("left", listOf(ChartDataPoint("A", 0f, 40f)), 0L),
+            ChartSeries("right", listOf(ChartDataPoint("A", 0f, 60f)), 0L),
+        )
+        val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(0f, 100f, -1f, 1f))
+
+        val hit = CartesianHitTester.nearestHorizontalBar(
+            series,
+            scale,
+            x = 80f,
+            y = 50f,
+            stacked = true,
+        )
+
+        assertNotNull(hit)
+        assertEquals(1, hit.seriesIndex)
+    }
+
+    @Test
+    fun barHitTester_ignoresBlankArea() {
+        val series = listOf(
+            ChartSeries("bars", listOf(ChartDataPoint("A", 0f, 40f)), 0L),
+        )
+        val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(-1f, 1f, 0f, 100f))
+
+        assertEquals(null, CartesianHitTester.nearestBar(series, scale, x = 50f, y = 80f))
+    }
+
+    @Test
+    fun horizontalBarHitTester_ignoresBlankArea() {
+        val series = listOf(
+            ChartSeries("bars", listOf(ChartDataPoint("A", 0f, 40f)), 0L),
+        )
+        val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(0f, 100f, -1f, 1f))
+
+        assertEquals(null, CartesianHitTester.nearestHorizontalBar(series, scale, x = 80f, y = 20f))
+    }
+
+    @Test
+    fun interactiveLegendFiltersWithoutMutatingSourceSeries() {
+        val source = listOf(
+            ChartSeries("A", emptyList(), 0L),
+            ChartSeries("B", emptyList(), 0L),
+        )
+        val hidden = toggleHiddenSeries(emptySet(), "A")
+
+        assertEquals(listOf("B"), filterVisibleSeries(source, hidden).map { it.name })
+        assertEquals(listOf("A", "B"), source.map { it.name })
+        assertTrue(toggleHiddenSeries(hidden, "A").isEmpty())
+    }
+
+    private fun touchParams(vararg xCoordinates: Float): TouchParams {
+        val touches = xCoordinates.mapIndexed { index, x ->
+            Touch(x, 50f, x, 50f, index.toFloat(), index.toLong())
+        }
+        return TouchParams(
+            x = xCoordinates.firstOrNull() ?: 0f,
+            y = 50f,
+            pageX = xCoordinates.firstOrNull() ?: 0f,
+            pageY = 50f,
+            timestamp = 0L,
+            pointerId = 0,
+            action = "",
+            touches = touches,
+            consumed = false,
+        )
     }
 }

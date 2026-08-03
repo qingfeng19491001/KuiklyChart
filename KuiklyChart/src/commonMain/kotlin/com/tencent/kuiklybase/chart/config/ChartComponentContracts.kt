@@ -32,6 +32,34 @@ open class SeriesCartesianChartAttr : CartesianChartAttr() {
     fun legend(block: ChartLegendConfig.() -> Unit) = legend.apply(block)
 }
 
+/** Tooltip 中的一条系列数据。 */
+data class ChartTooltipItem(
+    val seriesName: String,
+    val point: ChartDataPoint,
+    val seriesIndex: Int,
+    val pointIndex: Int,
+)
+
+/** Tooltip 格式化上下文；多系列模式下 [items] 包含同一 X 坐标的可见系列。 */
+data class ChartTooltipContext(
+    val label: String,
+    val x: Float,
+    val items: List<ChartTooltipItem>,
+)
+
+/** 折线图 Tooltip DSL 配置。 */
+class ChartTooltipConfig {
+    /** 多系列折线图是否聚合同一 X 坐标下的全部系列。 */
+    var sharedByX: Boolean = true
+    private var formatterHandler: ((ChartTooltipContext) -> String)? = null
+
+    fun formatter(handler: (ChartTooltipContext) -> String) {
+        formatterHandler = handler
+    }
+
+    internal fun format(context: ChartTooltipContext): String? = formatterHandler?.invoke(context)
+}
+
 class LineChartAttr : SeriesCartesianChartAttr() {
     /** 平滑曲线（三次贝塞尔近似）。 */
     var smooth: Boolean = false
@@ -39,6 +67,24 @@ class LineChartAttr : SeriesCartesianChartAttr() {
     var showPoints: Boolean = true
     /** 数据点半径。 */
     var pointRadius: Float = 4f
+    /** 是否连接缺失值（NaN / Float.NEGATIVE_INFINITY 视作断点）。默认 true。 */
+    var connectNulls: Boolean = true
+    /** 是否在折线下方填充区域（线性填充）。 */
+    var fillBelow: Boolean = false
+    /**
+     * 阈值参考线集合。每条为 Y=value 处的水平虚线 + 可选标签。
+     * 渲染顺序：网格 → 阈值 → 填充 → 折线 → 数据点 → 注释。
+     */
+    val thresholds = mutableListOf<ChartThresholdConfig>()
+    /**
+     * 文本注释集合。每个注释固定在 (dataX, dataY) 位置，可选连接线/锚点。
+     */
+    val annotations = mutableListOf<ChartAnnotationConfig>()
+    val tooltip = ChartTooltipConfig()
+
+    fun thresholds(block: MutableList<ChartThresholdConfig>.() -> Unit) = thresholds.apply(block)
+    fun annotations(block: MutableList<ChartAnnotationConfig>.() -> Unit) = annotations.apply(block)
+    fun tooltip(block: ChartTooltipConfig.() -> Unit) = tooltip.apply(block)
 }
 
 class BarChartAttr : SeriesCartesianChartAttr() {
@@ -54,10 +100,15 @@ class BarChartAttr : SeriesCartesianChartAttr() {
 }
 
 class AreaChartAttr : SeriesCartesianChartAttr() {
+    var mode: AreaMode = AreaMode.BASIC
     var gradientFill: Boolean = true
     var smooth: Boolean = false
     var showPoints: Boolean = false
     var pointRadius: Float = 4f
+}
+
+enum class AreaMode {
+    BASIC, STACKED, PERCENT_STACKED, SPLINE, RANGE, STEP, STREAM, OVERLAPPED, POLAR, RIDGELINE,
 }
 
 class ScatterChartAttr : SeriesCartesianChartAttr() {
@@ -66,6 +117,16 @@ class ScatterChartAttr : SeriesCartesianChartAttr() {
 
 class StockChartAttr : CartesianChartAttr() {
     var candleWidthRatio: Float = 0.6f
+
+    init {
+        interaction.enablePan = true
+        interaction.enableScale = true
+        interaction.enableReset = true
+        interaction.lockY = true
+        interaction.clampToData = false
+        interaction.initialVisibleRatio = 0.55f
+        interaction.initialVisibleAnchor = VisibleAnchor.END
+    }
 }
 
 class CartesianChartEvent : ComposeEvent() {
