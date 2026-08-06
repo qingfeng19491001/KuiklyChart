@@ -492,9 +492,11 @@ internal object ChartCanvasRenderer {
         }
         val plot = layout.plot
         val scale = CartesianScale(plot, viewport)
-        val totals = if (mode == AreaMode.PERCENT_STACKED) {
+        val totals = if (mode == AreaMode.PERCENT_STACKED || mode == AreaMode.STREAM) {
             val n = series.maxOfOrNull { it.points.size } ?: 0
-            (0 until n).map { i -> series.sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().coerceAtLeast(1e-6f) }
+            (0 until n).map { i ->
+                series.sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat()
+            }
         } else emptyList()
         series.forEachIndexed { sIdx, s ->
             if (s.points.isEmpty()) return@forEachIndexed
@@ -506,18 +508,28 @@ internal object ChartCanvasRenderer {
             }
             val pixels = values.mapIndexed { i, value ->
                 val lower = if (stacked) {
-                    series.take(sIdx).sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().let {
-                        if (mode == AreaMode.PERCENT_STACKED) it / totals.getOrElse(i) { 1f } * 100f else it
+                    val prefix = series.take(sIdx)
+                        .sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }
+                        .toFloat()
+                    when (mode) {
+                        AreaMode.PERCENT_STACKED -> prefix / totals.getOrElse(i) { 1f }.coerceAtLeast(1e-6f) * 100f
+                        AreaMode.STREAM -> prefix - totals.getOrElse(i) { 0f } / 2f
+                        else -> prefix
                     }
-                } else if (mode == AreaMode.STREAM) -values.maxOrNull().orZero() / 2f else 0f
+                } else 0f
                 scale.toPixelX(s.points[i].x) to scale.toPixelY(value + lower)
             }
             val basePixels = values.mapIndexed { i, _ ->
                 val lower = if (stacked) {
-                    series.take(sIdx).sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }.toFloat().let {
-                        if (mode == AreaMode.PERCENT_STACKED) it / totals.getOrElse(i) { 1f } * 100f else it
+                    val prefix = series.take(sIdx)
+                        .sumOf { it.points.getOrNull(i)?.y?.toDouble() ?: 0.0 }
+                        .toFloat()
+                    when (mode) {
+                        AreaMode.PERCENT_STACKED -> prefix / totals.getOrElse(i) { 1f }.coerceAtLeast(1e-6f) * 100f
+                        AreaMode.STREAM -> prefix - totals.getOrElse(i) { 0f } / 2f
+                        else -> prefix
                     }
-                } else if (mode == AreaMode.STREAM) -values.maxOrNull().orZero() / 2f else 0f
+                } else 0f
                 scale.toPixelX(s.points[i].x) to scale.toPixelY(lower)
             }
             val color = s.color.toChartColor()
@@ -573,8 +585,6 @@ internal object ChartCanvasRenderer {
             }
         }
     }
-
-    private fun Float?.orZero(): Float = this ?: 0f
 
     private fun drawPolarArea(
         ctx: ContextApi, layout: CartesianLayout, viewport: ChartViewport,
