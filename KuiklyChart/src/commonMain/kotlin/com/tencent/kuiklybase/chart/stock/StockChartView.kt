@@ -4,7 +4,6 @@ import com.tencent.kuikly.core.base.ViewContainer
 import com.tencent.kuikly.core.reactive.collection.ObservableList
 import com.tencent.kuikly.core.views.ContextApi
 import com.tencent.kuiklybase.chart.config.StockChartAttr
-import com.tencent.kuiklybase.chart.config.VisibleAnchor
 import com.tencent.kuiklybase.chart.core.ChartCanvasRenderer
 import com.tencent.kuiklybase.chart.core.withPlotClip
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianInteractiveView
@@ -21,15 +20,7 @@ class StockChartView(
 
     private var lastSnapshot: List<OhlcPoint>? = null
 
-    override fun createAttr() = StockChartAttr().apply {
-        interaction.enablePan = true
-        interaction.enableScale = true
-        interaction.enableReset = true
-        interaction.lockY = true
-        interaction.clampToData = false
-        interaction.initialVisibleRatio = 0.55f
-        interaction.initialVisibleAnchor = VisibleAnchor.END
-    }
+    override fun createAttr() = StockChartAttr()
 
     override fun onBeforeResetViewport() {
         lastSnapshot = null

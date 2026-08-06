@@ -6,7 +6,6 @@ class ChartAxisConfig {
 
 class ChartGridConfig {
     var show: Boolean = true
-    var color: Long = 0xFFF0F0F0
 }
 
 class ChartLegendConfig {
