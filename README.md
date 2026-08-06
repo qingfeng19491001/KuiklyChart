@@ -57,8 +57,6 @@ data class RadarSeries(val name: String, val values: List<Float>, val color: Lon
 data class OhlcPoint(val label: String, val x: Float, val open: Float, val high: Float, val low: Float, val close: Float)
 ```
 
-选中态保持数据自身颜色（外扩 / 白描边），不再统一刷成主题蓝。
-
 ### 事件
 
 直角坐标图支持：
@@ -75,7 +73,6 @@ event {
 饼图和环形图支持 `sliceClick`、`selectionChange`；雷达图支持 `radarClick`、`selectionChange`。
 
 交互开关属于组件初始化配置。运行时如需切换交互策略，请重建图表节点。
-事件始终注册，开关在回调内判断。
 
 默认交互（基础）：
 
@@ -113,8 +110,6 @@ tooltip {
     }
 }
 ```
-
-交互示例已合并到各图表变体页，避免独立手势 Demo 与真实使用场景脱节。
 
 ## 主题
 
@@ -199,6 +194,42 @@ override fun body(): ViewBuilder {
 图表数据必须由 `observableList` 持有，并通过 `() -> ObservableList<T>` 传给组件。
 
 运行 `androidApp`、`iosApp` 或 `ohosApp` 后进入默认 `router` 页面。Demo 覆盖折线 / 柱状 / 条形 / 面积 / 饼  / 散点 / 雷达 / 股票等图表。
+
+### 高级图表
+
+14 类高级图表共用 `AdvancedChartAttr`、`AdvancedChartEvent` 和一套渲染内核。可变列表通过 `() -> ObservableList<T>` 传入，点击选择使用 `event { itemClick { ... } }`；股票面积图、股票折线图和 Kagi 图还提供 `viewportChange`。
+
+```kotlin
+import com.tencent.kuikly.core.reactive.handler.observableList
+import com.tencent.kuiklybase.chart.advanced.WaterfallChart
+import com.tencent.kuiklybase.chart.advanced.WaterfallPoint
+
+private var waterfall by observableList<WaterfallPoint>()
+
+override fun created() {
+    super.created()
+    waterfall.addAll(
+        listOf(
+            WaterfallPoint("Start", 70f),
+            WaterfallPoint("Sales", 24f),
+            WaterfallPoint("Cost", -18f),
+            WaterfallPoint("Total", 76f, isTotal = true),
+        ),
+    )
+}
+
+override fun body(): ViewBuilder {
+    val page = this
+    return {
+        WaterfallChart({ page.waterfall }) {
+            attr { flex(1f) }
+            event { itemClick { selection -> println(selection) } }
+        }
+    }
+}
+```
+
+公共入口包括：`DualAxisBarChart`、`WaterfallChart`、`HistogramChart`、`BulletChart`、`HalfDonutChart`、`RoseChart`、`SunburstChart`、`NestedPieChart`、`OhlcChart`、`StockAreaChart`、`StockLineChart`、`RenkoChart`、`KagiChart`、`PointFigureChart`。
 
 ## License
 
