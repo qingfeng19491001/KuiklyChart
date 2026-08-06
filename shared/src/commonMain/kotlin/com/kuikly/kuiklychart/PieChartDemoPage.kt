@@ -6,6 +6,12 @@ import com.tencent.kuikly.core.base.ViewBuilder
 import com.tencent.kuikly.core.layout.FlexDirection
 import com.tencent.kuikly.core.reactive.handler.observableList
 import com.tencent.kuikly.core.views.Scroller
+import com.tencent.kuiklybase.chart.advanced.HalfDonutChart
+import com.tencent.kuiklybase.chart.advanced.NestedPieChart
+import com.tencent.kuiklybase.chart.advanced.NestedPieSlice
+import com.tencent.kuiklybase.chart.advanced.RoseChart
+import com.tencent.kuiklybase.chart.advanced.SunburstChart
+import com.tencent.kuiklybase.chart.advanced.SunburstNode
 import com.tencent.kuiklybase.chart.model.ChartSlice
 import com.tencent.kuiklybase.chart.pie.DonutChart
 import com.tencent.kuiklybase.chart.pie.PieChart
@@ -14,10 +20,18 @@ import com.tencent.kuiklybase.chart.pie.PieChart
 @Page("pie_chart_demo", supportInLocal = true)
 internal class PieChartDemoPage : BasePager() {
     private var slices by observableList<ChartSlice>()
+    private var halfDonut by observableList<ChartSlice>()
+    private var rose by observableList<ChartSlice>()
+    private var sunburst by observableList<SunburstNode>()
+    private var nestedPie by observableList<NestedPieSlice>()
 
     override fun created() {
         super.created()
         slices.addAll(DemoSampleData.pieSlices())
+        halfDonut.addAll(AdvancedDemoData.halfDonut())
+        rose.addAll(AdvancedDemoData.rose())
+        sunburst.addAll(AdvancedDemoData.sunburst())
+        nestedPie.addAll(AdvancedDemoData.nestedPie())
     }
 
     override fun body(): ViewBuilder {
@@ -57,19 +71,19 @@ internal class PieChartDemoPage : BasePager() {
                 }
 
                 demoVariantSection(3, "半环形图") {
-                    SpecialDemoChart(SpecialDemoChartKind.HALF_DONUT)
+                    HalfDonutChart({ page.halfDonut }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(4, "南丁格尔玫瑰图") {
-                    SpecialDemoChart(SpecialDemoChartKind.ROSE)
+                    RoseChart({ page.rose }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(5, "旭日图") {
-                    SpecialDemoChart(SpecialDemoChartKind.SUNBURST)
+                    SunburstChart({ page.sunburst }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(6, "嵌套饼图") {
-                    SpecialDemoChart(SpecialDemoChartKind.NESTED_PIE)
+                    NestedPieChart({ page.nestedPie }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(7, "爆炸饼图") {

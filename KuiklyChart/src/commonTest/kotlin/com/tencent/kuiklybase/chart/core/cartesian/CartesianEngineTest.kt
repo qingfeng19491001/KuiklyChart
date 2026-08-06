@@ -468,7 +468,7 @@ class CartesianEngineTest {
         )
         val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(-1f, 1f, 0f, 100f))
 
-        val hit = CartesianHitTester.nearestBar(series, scale, x = 27f, y = 30f, grouped = true)
+        val hit = CartesianHitTester.nearestBar(series, scale, x = 75f, y = 60f, grouped = true)
 
         assertNotNull(hit)
         assertEquals(1, hit.seriesIndex)
@@ -501,7 +501,7 @@ class CartesianEngineTest {
         )
         val scale = CartesianScale(PlotRect(0f, 0f, 100f, 100f), ChartViewport(-1f, 1f, 0f, 100f))
 
-        assertEquals(null, CartesianHitTester.nearestBar(series, scale, x = 50f, y = 80f))
+        assertEquals(null, CartesianHitTester.nearestBar(series, scale, x = 50f, y = 40f))
     }
 
     @Test

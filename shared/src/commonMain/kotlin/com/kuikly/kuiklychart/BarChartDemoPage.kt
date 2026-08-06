@@ -6,6 +6,14 @@ import com.tencent.kuikly.core.base.ViewBuilder
 import com.tencent.kuikly.core.layout.FlexDirection
 import com.tencent.kuikly.core.reactive.handler.observableList
 import com.tencent.kuikly.core.views.Scroller
+import com.tencent.kuiklybase.chart.advanced.BulletChart
+import com.tencent.kuiklybase.chart.advanced.BulletChartItem
+import com.tencent.kuiklybase.chart.advanced.DualAxisBarChart
+import com.tencent.kuiklybase.chart.advanced.DualAxisPoint
+import com.tencent.kuiklybase.chart.advanced.HistogramBin
+import com.tencent.kuiklybase.chart.advanced.HistogramChart
+import com.tencent.kuiklybase.chart.advanced.WaterfallChart
+import com.tencent.kuiklybase.chart.advanced.WaterfallPoint
 import com.tencent.kuiklybase.chart.bar.BarChart
 import com.tencent.kuiklybase.chart.model.ChartDataPoint
 import com.tencent.kuiklybase.chart.model.ChartSeries
@@ -18,6 +26,10 @@ internal class BarChartDemoPage : BasePager() {
     private var stacked by observableList<ChartSeries>()
     private var percentStacked by observableList<ChartSeries>()
     private var horizontal by observableList<ChartSeries>()
+    private var dualAxis by observableList<DualAxisPoint>()
+    private var waterfall by observableList<WaterfallPoint>()
+    private var histogram by observableList<HistogramBin>()
+    private var bullets by observableList<BulletChartItem>()
 
     override fun created() {
         super.created()
@@ -33,6 +45,10 @@ internal class BarChartDemoPage : BasePager() {
         stacked.addAll(DemoSampleData.stackedBarSeries())
         percentStacked.addAll(normalizeToPercent(DemoSampleData.stackedBarSeries()))
         horizontal.addAll(DemoSampleData.horizontalBarSeries())
+        dualAxis.addAll(AdvancedDemoData.dualAxis())
+        waterfall.addAll(AdvancedDemoData.waterfall())
+        histogram.addAll(AdvancedDemoData.histogram())
+        bullets.addAll(AdvancedDemoData.bullets())
     }
 
     override fun body(): ViewBuilder {
@@ -109,19 +125,19 @@ internal class BarChartDemoPage : BasePager() {
                 }
 
                 demoVariantSection(6, "双轴柱状图") {
-                    SpecialDemoChart(SpecialDemoChartKind.DUAL_AXIS_BAR)
+                    DualAxisBarChart({ page.dualAxis }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(7, "瀑布图") {
-                    SpecialDemoChart(SpecialDemoChartKind.WATERFALL)
+                    WaterfallChart({ page.waterfall }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(8, "直方图") {
-                    SpecialDemoChart(SpecialDemoChartKind.HISTOGRAM)
+                    HistogramChart({ page.histogram }) { attr { flex(1f) } }
                 }
 
                 demoVariantSection(9, "子弹图") {
-                    SpecialDemoChart(SpecialDemoChartKind.BULLET)
+                    BulletChart({ page.bullets }) { attr { flex(1f) } }
                 }
             }
         }
