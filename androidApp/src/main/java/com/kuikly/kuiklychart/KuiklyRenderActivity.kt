@@ -21,7 +21,6 @@ import com.kuikly.kuiklychart.adapter.KRRouterAdapter
 import com.kuikly.kuiklychart.adapter.KRThreadAdapter
 import com.kuikly.kuiklychart.adapter.KRUncaughtExceptionHandlerAdapter
 import com.kuikly.kuiklychart.module.KRBridgeModule
-import com.kuikly.kuiklychart.module.KRShareModule
 import org.json.JSONObject
 
 class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorDelegate {
@@ -74,16 +73,6 @@ class KuiklyRenderActivity : AppCompatActivity(), KuiklyRenderViewBaseDelegatorD
             moduleExport(KRBridgeModule.MODULE_NAME) {
                 KRBridgeModule()
             }
-            moduleExport(KRShareModule.MODULE_NAME) {
-                KRShareModule()
-            }
-        }
-    }
-
-    override fun registerExternalRenderView(kuiklyRenderExport: IKuiklyRenderExport) {
-        super.registerExternalRenderView(kuiklyRenderExport)
-        with(kuiklyRenderExport) {
-
         }
     }
 

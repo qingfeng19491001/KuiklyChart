@@ -23,8 +23,8 @@ kotlin {
     iosSimulatorArm64()
 
     cocoapods {
-        summary = "Some description for the Shared Module"
-        homepage = "Link to the Shared Module homepage"
+        summary = "KuiklyChart cross-platform demo application"
+        homepage = "https://github.com/qingfeng19491001/KuiklyChart"
         version = "1.0"
         ios.deploymentTarget = "14.1"
         podfile = project.file("../iosApp/Podfile")
@@ -101,11 +101,6 @@ android {
     defaultConfig {
         minSdk = 21
         targetSdk = 30
-    }
-    sourceSets {
-        named("main") {
-            assets.srcDirs("src/commonMain/assets")
-        }
     }
 }
 
