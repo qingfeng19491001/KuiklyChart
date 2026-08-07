@@ -2,7 +2,6 @@ package com.kuikly.kuiklychart
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import com.tencent.kuiklybase.chart.config.StockThemePreset
 
 class DemoLayoutTest {
     @Test
@@ -30,9 +29,4 @@ class DemoLayoutTest {
         assertEquals(236f, stockVariantCardHeight(professional = false))
     }
 
-    @Test
-    fun stockThemePreset_mapsDemoToggle() {
-        assertEquals(StockThemePreset.LIGHT, stockThemePreset(dark = false))
-        assertEquals(StockThemePreset.DARK, stockThemePreset(dark = true))
-    }
 }

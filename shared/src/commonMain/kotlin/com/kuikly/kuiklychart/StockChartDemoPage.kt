@@ -4,7 +4,6 @@ import com.kuikly.kuiklychart.base.BasePager
 import com.tencent.kuikly.core.annotations.Page
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewBuilder
-import com.tencent.kuikly.core.directives.vbind
 import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.layout.FlexDirection
 import com.tencent.kuikly.core.reactive.handler.observable
@@ -19,7 +18,6 @@ import com.tencent.kuiklybase.chart.advanced.PointFigureColumn
 import com.tencent.kuiklybase.chart.advanced.RenkoChart
 import com.tencent.kuiklybase.chart.advanced.StockAreaChart
 import com.tencent.kuiklybase.chart.advanced.StockLineChart
-import com.tencent.kuiklybase.chart.config.StockThemePreset
 import com.tencent.kuiklybase.chart.model.ChartDataPoint
 import com.tencent.kuiklybase.chart.model.OhlcPoint
 import com.tencent.kuiklybase.chart.stock.StockChart
@@ -52,10 +50,7 @@ internal fun stockMorePeriods(): List<StockPeriod> = listOf(
     StockPeriod.YEAR,
 )
 
-internal fun stockThemePreset(dark: Boolean): StockThemePreset =
-    if (dark) StockThemePreset.DARK else StockThemePreset.LIGHT
-
-/** 股票图变体画廊：专业 K 线额外展示周期、均线、成交量与主题能力。 */
+/** 股票图变体画廊：专业 K 线额外展示周期、均线和成交量能力。 */
 @Page("stock_chart_demo", supportInLocal = true)
 internal class StockChartDemoPage : BasePager() {
     private var candles by observableList<OhlcPoint>()
@@ -65,7 +60,6 @@ internal class StockChartDemoPage : BasePager() {
     private var pointFigure by observableList<PointFigureColumn>()
     private var selectedPeriod by observable(StockPeriod.DAY)
     private var showMorePeriods by observable(false)
-    private var darkStockTheme by observable(false)
 
     override fun created() {
         super.created()
@@ -86,10 +80,7 @@ internal class StockChartDemoPage : BasePager() {
     override fun body(): ViewBuilder {
         val page = this
         return chartDemoShell(page, "StockChart") {
-            View {
-                attr { flex(1f) }
-                vbind({ page.darkStockTheme }) {
-                    Scroller {
+            Scroller {
                 attr {
                     flex(1f)
                     flexDirection(FlexDirection.COLUMN)
@@ -166,31 +157,12 @@ internal class StockChartDemoPage : BasePager() {
                                     }
                                 }
                             }
-                            View {
-                                attr {
-                                    height(26f)
-                                    paddingLeft(9f)
-                                    paddingRight(9f)
-                                    borderRadius(13f)
-                                    allCenter()
-                                    backgroundColor(Color(if (page.darkStockTheme) 0xFF1F2937 else 0xFFF0F5FF))
-                                }
-                                event { click { page.darkStockTheme = !page.darkStockTheme } }
-                                Text {
-                                    attr {
-                                        text(if (page.darkStockTheme) "深色" else "浅色")
-                                        fontSize(12f)
-                                        color(Color(if (page.darkStockTheme) 0xFFF5F5F5 else 0xFF1677FF))
-                                    }
-                                }
-                            }
                         }
 
                         StockChart({ page.candles }) {
                             attr {
                                 flex(1f)
                                 title = "${page.selectedPeriod.label} · 专业 K 线"
-                                preset = stockThemePreset(page.darkStockTheme)
                                 candleWidthRatio = 0.58f
                                 movingAverages {
                                     show = true
@@ -219,7 +191,7 @@ internal class StockChartDemoPage : BasePager() {
                                     zIndex(20)
                                     flexDirectionRow()
                                     borderRadius(8f)
-                                    backgroundColor(Color(if (page.darkStockTheme) 0xFF1F2937 else 0xFFFFFFFF))
+                                    backgroundColor(Color(0xFFFFFFFF))
                                 }
                                 stockMorePeriods().chunked(4).forEach { column ->
                                     View {
@@ -245,7 +217,6 @@ internal class StockChartDemoPage : BasePager() {
                                                         color(
                                                             Color(
                                                                 if (page.selectedPeriod == period) 0xFF1677FF
-                                                                else if (page.darkStockTheme) 0xFFD9D9D9
                                                                 else 0xFF595959,
                                                             ),
                                                         )
@@ -264,7 +235,6 @@ internal class StockChartDemoPage : BasePager() {
                     OhlcChart({ page.candles }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -274,7 +244,6 @@ internal class StockChartDemoPage : BasePager() {
                         attr {
                             flex(1f)
                             title = "蜡烛柱走势"
-                            preset = stockThemePreset(page.darkStockTheme)
                             candleWidthRatio = 0.78f
                         }
                     }
@@ -284,7 +253,6 @@ internal class StockChartDemoPage : BasePager() {
                     StockAreaChart({ page.stockPoints }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -293,7 +261,6 @@ internal class StockChartDemoPage : BasePager() {
                     StockLineChart({ page.stockPoints }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -302,7 +269,6 @@ internal class StockChartDemoPage : BasePager() {
                     RenkoChart({ page.renko }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -311,7 +277,6 @@ internal class StockChartDemoPage : BasePager() {
                     KagiChart({ page.kagi }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -320,13 +285,10 @@ internal class StockChartDemoPage : BasePager() {
                     PointFigureChart({ page.pointFigure }) {
                         attr {
                             flex(1f)
-                            preset = stockThemePreset(page.darkStockTheme)
                         }
-                    }
                     }
                 }
             }
         }
     }
-}
 }
