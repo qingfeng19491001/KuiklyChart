@@ -44,7 +44,8 @@ implementation("com.tencent.kuiklybase:KuiklyChart:1.2.1-2.0.21-KBA-010")
 - `PieChart`：饼图；`ringWidth` / `centerText` 可画环形。
 - `DonutChart`：环形图兼容入口（复用 `PieChart`）。
 - `RadarChart`：雷达图。
-- `StockChart`：K 线（与系列图共用笛卡尔交互壳；无图例配置）。
+- `StockChart`：专业 K 线，支持 OHLCV、MA 均线、可选成交量副图、浅深主题与统一的股票图交互。
+- `OhlcChart` / `StockAreaChart` / `StockLineChart` / `RenkoChart` / `KagiChart` / `PointFigureChart`：股票图变体，共享查看、准星、平移、缩放和复位行为。
 
 ### 数据模型
 
@@ -54,7 +55,15 @@ data class ChartSeries(val name: String, val points: List<ChartDataPoint>, val c
 data class ChartSlice(val label: String, val value: Float, val color: Long)
 data class RadarDimension(val label: String, val maxValue: Float)
 data class RadarSeries(val name: String, val values: List<Float>, val color: Long)
-data class OhlcPoint(val label: String, val x: Float, val open: Float, val high: Float, val low: Float, val close: Float)
+data class OhlcPoint(
+    val label: String,
+    val x: Float,
+    val open: Float,
+    val high: Float,
+    val low: Float,
+    val close: Float,
+    val volume: Float? = null,
+)
 ```
 
 ### 事件
@@ -193,11 +202,46 @@ override fun body(): ViewBuilder {
 
 图表数据必须由 `observableList` 持有，并通过 `() -> ObservableList<T>` 传给组件。
 
+### 专业 K 线
+
+```kotlin
+import com.tencent.kuikly.core.reactive.handler.observableList
+import com.tencent.kuiklybase.chart.config.StockThemePreset
+import com.tencent.kuiklybase.chart.model.OhlcPoint
+import com.tencent.kuiklybase.chart.stock.StockChart
+
+private var candles by observableList<OhlcPoint>()
+
+StockChart({ candles }) {
+    attr {
+        flex(1f)
+        preset = StockThemePreset.DARK
+        movingAverages {
+            show = true
+            line(5, 0xFF8C8C8C)
+            line(10, 0xFFFAAD14)
+            line(20, 0xFF1677FF)
+            line(30, 0xFFEB2F96)
+        }
+        volumePanel {
+            show = true
+            average(5, 0xFF8C8C8C)
+            average(10, 0xFFFAAD14)
+        }
+        interaction {
+            enableCrosshair = true
+        }
+    }
+}
+```
+
+`StockChart` 只消费当前周期的 OHLCV 数据与图表配置。日 K、周 K、月 K、分钟周期等 Tab/下拉选择由调用方持有；切换周期时更新传入的 `observableList`。专业 K 线默认支持点击/长按查看、水平平移、双指缩放和双击复位，成交量数据全部为空时不会绘制副图。
+
 运行 `androidApp`、`iosApp` 或 `ohosApp` 后进入默认 `router` 页面。Demo 覆盖折线 / 柱状 / 条形 / 面积 / 饼  / 散点 / 雷达 / 股票等图表。
 
 ### 高级图表
 
-14 类高级图表共用 `AdvancedChartAttr`、`AdvancedChartEvent` 和一套渲染内核。可变列表通过 `() -> ObservableList<T>` 传入，点击选择使用 `event { itemClick { ... } }`；股票面积图、股票折线图和 Kagi 图还提供 `viewportChange`。
+14 类高级图表共用 `AdvancedChartAttr`、`AdvancedChartEvent` 和一套渲染内核。可变列表通过 `() -> ObservableList<T>` 传入，点击选择使用 `event { itemClick { ... } }`；所有高级股票图变体均提供统一的选择反馈和 `viewportChange`。
 
 ```kotlin
 import com.tencent.kuikly.core.reactive.handler.observableList

@@ -42,3 +42,5 @@ kotlin-js-store
 /.kotlin
 /.run
 **/local.properties
+/.superpowers/
+/.superpowers-tools/
