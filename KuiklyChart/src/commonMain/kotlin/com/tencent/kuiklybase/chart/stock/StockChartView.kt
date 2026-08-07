@@ -35,6 +35,7 @@ class StockChartView(
         val data = ohlcProvider().toList()
         val bounds = ChartViewport.fromOhlc(data)
         val changed = data != lastSnapshot
+        if (stockDataChanged(lastSnapshot, data)) clearSelection()
         lastSnapshot = data
         applyViewportBounds(bounds, changed)
     }

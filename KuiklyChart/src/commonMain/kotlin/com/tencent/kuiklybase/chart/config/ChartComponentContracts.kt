@@ -127,6 +127,7 @@ class StockMovingAverageConfig {
 
     fun line(period: Int, color: Long, label: String = "MA$period") {
         require(period > 0) { "period must be positive" }
+        lines.removeAll { it.period == period }
         lines += StockAverageLine(period, color, label)
     }
 }
@@ -138,6 +139,7 @@ class StockVolumePanelConfig {
 
     fun average(period: Int, color: Long, label: String = "VMA$period") {
         require(period > 0) { "period must be positive" }
+        averageLines.removeAll { it.period == period }
         averageLines += StockAverageLine(period, color, label)
     }
 }
@@ -157,6 +159,7 @@ class StockChartAttr : CartesianChartAttr() {
         interaction.enablePan = true
         interaction.enableScale = true
         interaction.enableReset = true
+        interaction.enableCrosshair = true
         interaction.lockY = true
         interaction.clampToData = false
         interaction.initialVisibleRatio = 0.55f

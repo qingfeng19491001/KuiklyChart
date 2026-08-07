@@ -49,6 +49,9 @@ internal fun shouldShowVolumePanel(
     configured: Boolean,
 ): Boolean = configured && points.any { it.volume != null }
 
+internal fun stockDataChanged(previous: List<OhlcPoint>?, current: List<OhlcPoint>): Boolean =
+    previous != null && previous != current
+
 internal fun stockVolumeBounds(points: List<OhlcPoint>): ClosedFloatingPointRange<Float> {
     val maximum = points.mapNotNull { it.volume }.maxOrNull()?.coerceAtLeast(0f) ?: 0f
     return 0f..maximum

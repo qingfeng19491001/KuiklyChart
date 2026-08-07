@@ -71,4 +71,20 @@ class StockVariantInteractionTest {
         assertTrue(attr.interaction.enableScale)
         assertTrue(attr.interaction.enableReset)
     }
+
+    @Test
+    fun advancedStockAxis_samplesDenseLabelsWithoutDroppingEdges() {
+        val labels = List(21) { index -> "D${index + 12}" }
+
+        val indices = sampleAdvancedAxisLabelIndices(
+            labels = labels,
+            availableWidth = 254f,
+            fontSize = 10f,
+        )
+
+        assertEquals(0, indices.first())
+        assertEquals(labels.lastIndex, indices.last())
+        assertTrue(indices.size < labels.size)
+        assertTrue(indices.zipWithNext().all { (left, right) -> right > left })
+    }
 }

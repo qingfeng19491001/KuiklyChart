@@ -4,6 +4,7 @@ import com.kuikly.kuiklychart.base.BasePager
 import com.tencent.kuikly.core.annotations.Page
 import com.tencent.kuikly.core.base.Color
 import com.tencent.kuikly.core.base.ViewBuilder
+import com.tencent.kuikly.core.directives.vbind
 import com.tencent.kuikly.core.directives.vif
 import com.tencent.kuikly.core.layout.FlexDirection
 import com.tencent.kuikly.core.reactive.handler.observable
@@ -51,6 +52,9 @@ internal fun stockMorePeriods(): List<StockPeriod> = listOf(
     StockPeriod.YEAR,
 )
 
+internal fun stockThemePreset(dark: Boolean): StockThemePreset =
+    if (dark) StockThemePreset.DARK else StockThemePreset.LIGHT
+
 /** 股票图变体画廊：专业 K 线额外展示周期、均线、成交量与主题能力。 */
 @Page("stock_chart_demo", supportInLocal = true)
 internal class StockChartDemoPage : BasePager() {
@@ -82,7 +86,10 @@ internal class StockChartDemoPage : BasePager() {
     override fun body(): ViewBuilder {
         val page = this
         return chartDemoShell(page, "StockChart") {
-            Scroller {
+            View {
+                attr { flex(1f) }
+                vbind({ page.darkStockTheme }) {
+                    Scroller {
                 attr {
                     flex(1f)
                     flexDirection(FlexDirection.COLUMN)
@@ -183,7 +190,7 @@ internal class StockChartDemoPage : BasePager() {
                             attr {
                                 flex(1f)
                                 title = "${page.selectedPeriod.label} · 专业 K 线"
-                                preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                                preset = stockThemePreset(page.darkStockTheme)
                                 candleWidthRatio = 0.58f
                                 movingAverages {
                                     show = true
@@ -257,7 +264,7 @@ internal class StockChartDemoPage : BasePager() {
                     OhlcChart({ page.candles }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -267,7 +274,7 @@ internal class StockChartDemoPage : BasePager() {
                         attr {
                             flex(1f)
                             title = "蜡烛柱走势"
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                             candleWidthRatio = 0.78f
                         }
                     }
@@ -277,7 +284,7 @@ internal class StockChartDemoPage : BasePager() {
                     StockAreaChart({ page.stockPoints }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -286,7 +293,7 @@ internal class StockChartDemoPage : BasePager() {
                     StockLineChart({ page.stockPoints }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -295,7 +302,7 @@ internal class StockChartDemoPage : BasePager() {
                     RenkoChart({ page.renko }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -304,7 +311,7 @@ internal class StockChartDemoPage : BasePager() {
                     KagiChart({ page.kagi }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
                     }
                 }
@@ -313,11 +320,13 @@ internal class StockChartDemoPage : BasePager() {
                     PointFigureChart({ page.pointFigure }) {
                         attr {
                             flex(1f)
-                            preset = if (page.darkStockTheme) StockThemePreset.DARK else StockThemePreset.LIGHT
+                            preset = stockThemePreset(page.darkStockTheme)
                         }
+                    }
                     }
                 }
             }
         }
     }
+}
 }

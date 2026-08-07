@@ -38,6 +38,14 @@ class StockChartMathTest {
     }
 
     @Test
+    fun changedStockData_resetsInspectionState() {
+        val next = data.mapIndexed { index, point -> point.copy(label = "N$index") }
+
+        assertFalse(stockDataChanged(data, data.toList()))
+        assertTrue(stockDataChanged(data, next))
+    }
+
+    @Test
     fun splitPlots_reserveGapAndVolumeHeight() {
         val split = splitStockPlots(
             PlotRect(40f, 8f, 300f, 220f),

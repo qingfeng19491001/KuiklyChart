@@ -80,7 +80,23 @@ data class AdvancedChartSelection(
     val label: String,
     val value: Float? = null,
     val summary: String? = null,
-)
+) {
+    /** 保留新增 summary 字段前的 4 参数构造签名。 */
+    constructor(
+        kind: AdvancedChartKind,
+        index: Int,
+        label: String,
+        value: Float?,
+    ) : this(kind, index, label, value, null)
+
+    @Deprecated("Binary compatibility bridge", level = DeprecationLevel.HIDDEN)
+    fun copy(
+        kind: AdvancedChartKind = this.kind,
+        index: Int = this.index,
+        label: String = this.label,
+        value: Float? = this.value,
+    ): AdvancedChartSelection = AdvancedChartSelection(kind, index, label, value, summary)
+}
 
 class AdvancedChartInteractionConfig {
     var enableTap: Boolean = true

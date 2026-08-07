@@ -15,6 +15,7 @@ import com.tencent.kuikly.core.views.View
 import com.tencent.kuiklybase.chart.config.ChartTheme
 import com.tencent.kuiklybase.chart.config.StockThemePreset
 import com.tencent.kuiklybase.chart.config.resolveStockTheme
+import com.tencent.kuiklybase.chart.core.resolveDynamicXAxisTickCount
 import com.tencent.kuiklybase.chart.core.withAlpha
 import com.tencent.kuiklybase.chart.model.ChartDataPoint
 import com.tencent.kuiklybase.chart.model.ChartSlice
@@ -24,7 +25,28 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
+
+internal fun sampleAdvancedAxisLabelIndices(
+    labels: List<String>,
+    availableWidth: Float,
+    fontSize: Float,
+): List<Int> {
+    if (labels.isEmpty()) return emptyList()
+    val maxCount = resolveDynamicXAxisTickCount(
+        availableWidth = availableWidth,
+        labels = labels,
+        fontSize = fontSize,
+        minimumGap = 8f,
+    )
+    if (maxCount >= labels.size) return labels.indices.toList()
+    if (maxCount <= 1) return listOf(0)
+    val step = labels.lastIndex.toFloat() / (maxCount - 1)
+    return (0 until maxCount)
+        .map { index -> (index * step).roundToInt().coerceIn(0, labels.lastIndex) }
+        .distinct()
+}
 
 internal sealed interface AdvancedChartData {
     val size: Int
@@ -518,11 +540,14 @@ private object AdvancedChartRenderer {
 
     private fun drawLabels(ctx: ContextApi, plot: Plot, labels: List<String>, theme: ChartTheme) {
         if (labels.isEmpty()) return
-        ctx.font(theme.fontSize.coerceAtMost(10f))
+        val fontSize = theme.fontSize.coerceAtMost(10f)
+        ctx.font(fontSize)
         ctx.fillStyle(theme.textColor.toChartColor())
         ctx.textAlign(TextAlign.CENTER)
         val slot = plot.width / labels.size
-        labels.forEachIndexed { index, label -> ctx.fillText(label, plot.left + slot * (index + 0.5f), plot.bottom + 14f) }
+        sampleAdvancedAxisLabelIndices(labels, plot.width, fontSize).forEach { index ->
+            ctx.fillText(labels[index], plot.left + slot * (index + 0.5f), plot.bottom + 14f)
+        }
     }
 
     private fun drawDualAxis(ctx: ContextApi, width: Float, height: Float, items: List<DualAxisPoint>, theme: ChartTheme, selected: Int) {

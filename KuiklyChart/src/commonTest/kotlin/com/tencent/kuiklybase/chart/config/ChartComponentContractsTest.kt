@@ -21,6 +21,7 @@ class ChartComponentContractsTest {
         assertTrue(attr.interaction.enablePan)
         assertTrue(attr.interaction.enableScale)
         assertTrue(attr.interaction.enableReset)
+        assertTrue(attr.interaction.enableCrosshair)
         assertTrue(attr.interaction.lockY)
         assertFalse(attr.interaction.clampToData)
         assertEquals(0.55f, attr.interaction.initialVisibleRatio)
@@ -46,6 +47,27 @@ class ChartComponentContractsTest {
         assertEquals("MA10", attr.movingAverages.lines.last().label)
         assertEquals(0.26f, attr.volumePanel.heightRatio)
         assertEquals(5, attr.volumePanel.averageLines.single().period)
+    }
+
+    @Test
+    fun stockChart_indicatorDslReplacesRepeatedPeriods() {
+        val attr = StockChartAttr().apply {
+            movingAverages {
+                line(5, 0xFF111111)
+                line(5, 0xFF222222, "MA5 updated")
+            }
+            volumePanel {
+                average(10, 0xFF333333)
+                average(10, 0xFF444444, "VMA10 updated")
+            }
+        }
+
+        assertEquals(1, attr.movingAverages.lines.size)
+        assertEquals(0xFF222222, attr.movingAverages.lines.single().color)
+        assertEquals("MA5 updated", attr.movingAverages.lines.single().label)
+        assertEquals(1, attr.volumePanel.averageLines.size)
+        assertEquals(0xFF444444, attr.volumePanel.averageLines.single().color)
+        assertEquals("VMA10 updated", attr.volumePanel.averageLines.single().label)
     }
 
     @Test
