@@ -97,6 +97,53 @@ data class ChartTheme(
     val downColor: Long = 0xFF27AE60,
 )
 
+enum class StockThemePreset {
+    LIGHT,
+    DARK,
+}
+
+fun resolveStockTheme(
+    options: ChartThemeOptions,
+    preset: StockThemePreset,
+): ChartTheme {
+    val defaults = ChartTheme()
+    val base = when (preset) {
+        StockThemePreset.LIGHT -> ChartTheme(
+            primaryColor = 0xFF1677FF,
+            axisColor = 0xFFB8C0CC,
+            gridColor = 0xFFEDF0F4,
+            textColor = 0xFF262626,
+            backgroundColor = 0xFFFFFFFF,
+            upColor = 0xFFE74C3C,
+            downColor = 0xFF27AE60,
+        )
+        StockThemePreset.DARK -> ChartTheme(
+            primaryColor = 0xFF4C8DFF,
+            axisColor = 0xFF455066,
+            gridColor = 0xFF263243,
+            textColor = 0xFFD8DFEA,
+            backgroundColor = 0xFF101620,
+            upColor = 0xFFE15A5A,
+            downColor = 0xFF28AD78,
+        )
+    }
+    return base.copy(
+        primaryColor = options.primaryColor.customOr(base.primaryColor, defaults.primaryColor),
+        axisColor = options.axisColor.customOr(base.axisColor, defaults.axisColor),
+        gridColor = options.gridColor.customOr(base.gridColor, defaults.gridColor),
+        textColor = options.textColor.customOr(base.textColor, defaults.textColor),
+        backgroundColor = options.backgroundColor.customOr(base.backgroundColor, defaults.backgroundColor),
+        fontSize = options.fontSize.customOr(base.fontSize, defaults.fontSize),
+        lineWidth = options.lineWidth.customOr(base.lineWidth, defaults.lineWidth),
+        upColor = options.upColor.customOr(base.upColor, defaults.upColor),
+        downColor = options.downColor.customOr(base.downColor, defaults.downColor),
+    )
+}
+
+private fun Long.customOr(preset: Long, default: Long): Long = if (this != default) this else preset
+
+private fun Float.customOr(preset: Float, default: Float): Float = if (this != default) this else preset
+
 /**
  * 笛卡尔图交互。
  *
@@ -104,6 +151,8 @@ data class ChartTheme(
  */
 class ChartInteractionConfig {
     var enableTap: Boolean = true
+    /** Long press inspects the nearest data item without entering brush selection. */
+    var enableLongPressInspect: Boolean = false
     /** 长按拖动框选；默认关闭，松手后是否缩放见 [brushZoom]。 */
     var enableDragSelect: Boolean = false
     /** 双指捏合缩放；适合时间序列、K 线和密集数据，默认关闭。 */

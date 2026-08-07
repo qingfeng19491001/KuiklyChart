@@ -527,6 +527,21 @@ class CartesianEngineTest {
         assertTrue(toggleHiddenSeries(hidden, "A").isEmpty())
     }
 
+    @Test
+    fun longPress_prefersBrushThenInspect() {
+        val interaction = ChartInteractionConfig().apply {
+            enableDragSelect = true
+            enableLongPressInspect = true
+        }
+        assertEquals(LongPressAction.BRUSH, resolveLongPressAction(interaction))
+
+        interaction.enableDragSelect = false
+        assertEquals(LongPressAction.INSPECT, resolveLongPressAction(interaction))
+
+        interaction.enableLongPressInspect = false
+        assertEquals(LongPressAction.NONE, resolveLongPressAction(interaction))
+    }
+
     private fun touchParams(vararg xCoordinates: Float): TouchParams {
         val touches = xCoordinates.mapIndexed { index, x ->
             Touch(x, 50f, x, 50f, index.toFloat(), index.toLong())

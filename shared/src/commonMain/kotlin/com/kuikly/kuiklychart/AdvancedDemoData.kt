@@ -70,17 +70,25 @@ internal object AdvancedDemoData {
         NestedPieSlice("Ads", 12f, 0xFF531DAB, NestedPieRing.OUTER),
     )
 
-    fun stockPoints(): List<ChartDataPoint> = listOf(102f, 106f, 104f, 111f, 109f, 114f, 118f, 115f, 111f, 120f, 123f, 119f)
-        .mapIndexed { index, value -> ChartDataPoint("D${index + 1}", index.toFloat(), value) }
+    fun stockPoints(): List<ChartDataPoint> = (0 until 32).map { index ->
+        val value = 102f + index * 0.58f + ((index * 7) % 11 - 5) * 1.18f
+        ChartDataPoint("D${index + 1}", index.toFloat(), value)
+    }
 
-    fun renko(): List<ChartDataPoint> = listOf(2f, 3f, 4f, 5f, 4f, 5f, 6f, 7f, 6f, 5f, 6f)
-        .mapIndexed { index, value -> ChartDataPoint("R${index + 1}", index.toFloat(), value) }
+    fun renko(): List<ChartDataPoint> = (0 until 28).map { index ->
+        val value = 3f + index / 4f + if (index % 7 < 5) index % 5 else 3 - index % 4
+        ChartDataPoint("R${index + 1}", index.toFloat(), value)
+    }
 
-    fun kagi(): List<ChartDataPoint> = listOf(2f, 5f, 3f, 7f, 4f, 8f, 6f, 9f, 5f, 7f, 4f, 8f)
-        .mapIndexed { index, value -> ChartDataPoint("K${index + 1}", index.toFloat(), value) }
+    fun kagi(): List<ChartDataPoint> = (0 until 28).map { index ->
+        val swing = when (index % 6) { 0 -> 0f; 1 -> 4f; 2 -> 2f; 3 -> 7f; 4 -> 3f; else -> 6f }
+        ChartDataPoint("K${index + 1}", index.toFloat(), 4f + index / 8f + swing)
+    }
 
-    fun pointFigure(): List<PointFigureColumn> = listOf(3, -4, 5, -3, 6, -5, 4, -3, 5)
-        .mapIndexed { index, value -> PointFigureColumn("P${index + 1}", kotlin.math.abs(value), value > 0) }
+    fun pointFigure(): List<PointFigureColumn> = (0 until 24).map { index ->
+        val count = 3 + (index * 5) % 6
+        PointFigureColumn("P${index + 1}", count, index % 2 == 0)
+    }
 
     private val COLORS = listOf(0xFF1677FF, 0xFF36CFC9, 0xFF52C41A, 0xFFFFA940, 0xFF9254DE, 0xFFFF4D4F)
 }

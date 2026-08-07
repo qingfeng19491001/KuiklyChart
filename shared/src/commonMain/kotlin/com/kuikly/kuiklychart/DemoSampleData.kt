@@ -119,18 +119,39 @@ internal object DemoSampleData {
         ),
     )
 
-    fun stockSeries(): List<OhlcPoint> = listOf(
-        OhlcPoint("D1", 0f, 102f, 108f, 100f, 106f),
-        OhlcPoint("D2", 1f, 106f, 110f, 103f, 104f),
-        OhlcPoint("D3", 2f, 104f, 107f, 99f, 101f),
-        OhlcPoint("D4", 3f, 101f, 112f, 100f, 111f),
-        OhlcPoint("D5", 4f, 111f, 115f, 108f, 109f),
-        OhlcPoint("D6", 5f, 109f, 113f, 105f, 112f),
-        OhlcPoint("D7", 6f, 112f, 118f, 110f, 116f),
-        OhlcPoint("D8", 7f, 116f, 120f, 112f, 114f),
-        OhlcPoint("D9", 8f, 114f, 117f, 108f, 110f),
-        OhlcPoint("D10", 9f, 110f, 119f, 109f, 118f),
-    )
+    fun stockSeries(period: StockPeriod = StockPeriod.DAY): List<OhlcPoint> {
+        val scale = when (period) {
+            StockPeriod.MIN_1 -> 0.18f
+            StockPeriod.MIN_5 -> 0.26f
+            StockPeriod.MIN_15 -> 0.34f
+            StockPeriod.MIN_30 -> 0.42f
+            StockPeriod.MIN_60 -> 0.52f
+            StockPeriod.MIN_120 -> 0.64f
+            StockPeriod.DAY -> 0.9f
+            StockPeriod.WEEK -> 1.4f
+            StockPeriod.MONTH -> 2.1f
+            StockPeriod.QUARTER -> 3.2f
+            StockPeriod.YEAR -> 4.6f
+        }
+        var previousClose = 102f + period.ordinal * 1.7f
+        return (0 until 48).map { index ->
+            val direction = ((index * 7 + period.ordinal * 3) % 9 - 4) * scale
+            val open = previousClose + ((index % 3) - 1) * scale * 0.35f
+            val close = open + direction
+            val wick = (1f + index % 4) * scale * 0.55f
+            val point = OhlcPoint(
+                label = "${period.label}${index + 1}",
+                x = index.toFloat(),
+                open = open,
+                high = maxOf(open, close) + wick,
+                low = minOf(open, close) - wick * 0.8f,
+                close = close,
+                volume = 80_000f + ((index * 37 + period.ordinal * 113) % 160) * 1_250f,
+            )
+            previousClose = close
+            point
+        }
+    }
 
     fun pieSlices(): List<ChartSlice> = listOf(
         ChartSlice("移动端", 486f, 0xFF1677FF),

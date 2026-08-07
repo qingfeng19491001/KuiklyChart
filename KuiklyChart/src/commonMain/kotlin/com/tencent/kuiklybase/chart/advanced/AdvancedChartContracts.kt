@@ -3,6 +3,9 @@ package com.tencent.kuiklybase.chart.advanced
 import com.tencent.kuikly.core.base.ComposeAttr
 import com.tencent.kuikly.core.base.ComposeEvent
 import com.tencent.kuiklybase.chart.config.ChartThemeOptions
+import com.tencent.kuiklybase.chart.config.StockThemePreset
+import kotlin.math.ceil
+import kotlin.math.floor
 
 enum class AdvancedChartKind {
     DUAL_AXIS_BAR,
@@ -76,17 +79,23 @@ data class AdvancedChartSelection(
     val index: Int,
     val label: String,
     val value: Float? = null,
+    val summary: String? = null,
 )
 
 class AdvancedChartInteractionConfig {
     var enableTap: Boolean = true
+    var enableLongPressInspect: Boolean = false
+    var enableCrosshair: Boolean = false
     var enablePan: Boolean = false
     var enableScale: Boolean = false
     var enableReset: Boolean = false
+    var clampToData: Boolean = true
+    var minimumVisibleRatio: Float = 0.16f
     var initialVisibleRatio: Float = 1f
 }
 
 class AdvancedChartAttr : ComposeAttr() {
+    var preset: StockThemePreset = StockThemePreset.LIGHT
     val theme = ChartThemeOptions()
     val interaction = AdvancedChartInteractionConfig()
 
@@ -97,6 +106,7 @@ class AdvancedChartAttr : ComposeAttr() {
 class AdvancedChartEvent : ComposeEvent() {
     var onItemClick: ((AdvancedChartSelection) -> Unit)? = null
     var onViewportChange: ((Float, Float) -> Unit)? = null
+    var onSelectionChange: ((AdvancedChartSelection?) -> Unit)? = null
 
     fun itemClick(handler: (AdvancedChartSelection) -> Unit) {
         onItemClick = handler
@@ -104,5 +114,95 @@ class AdvancedChartEvent : ComposeEvent() {
 
     fun viewportChange(handler: (Float, Float) -> Unit) {
         onViewportChange = handler
+    }
+
+    fun selectionChange(handler: (AdvancedChartSelection?) -> Unit) {
+        onSelectionChange = handler
+    }
+}
+
+internal fun supportsStockViewport(kind: AdvancedChartKind): Boolean = when (kind) {
+    AdvancedChartKind.OHLC,
+    AdvancedChartKind.STOCK_AREA,
+    AdvancedChartKind.STOCK_LINE,
+    AdvancedChartKind.RENKO,
+    AdvancedChartKind.KAGI,
+    AdvancedChartKind.POINT_FIGURE,
+    -> true
+    else -> false
+}
+
+internal fun normalizeStockViewport(
+    start: Float,
+    end: Float,
+    minimumSpan: Float,
+): ClosedFloatingPointRange<Float> {
+    val safeMinimum = minimumSpan.coerceIn(0.01f, 1f)
+    val clampedStart = start.coerceIn(0f, 1f)
+    val clampedEnd = end.coerceIn(clampedStart, 1f)
+    val span = (clampedEnd - clampedStart).coerceIn(safeMinimum, 1f)
+    val nextStart = when {
+        clampedEnd >= 1f -> 1f - span
+        clampedStart <= 0f -> 0f
+        else -> clampedStart.coerceAtMost(1f - span)
+    }
+    return nextStart..(nextStart + span)
+}
+
+internal fun visibleStockIndexRange(
+    count: Int,
+    start: Float,
+    end: Float,
+): IntRange {
+    if (count <= 0) return IntRange.EMPTY
+    val first = floor(start.coerceIn(0f, 1f) * count).toInt().coerceIn(0, count - 1)
+    val last = (ceil(end.coerceIn(0f, 1f) * count).toInt() - 1).coerceIn(first, count - 1)
+    return first..last
+}
+
+internal fun sourceIndexForVisibleSlot(
+    slot: Int,
+    count: Int,
+    start: Float,
+    end: Float,
+): Int {
+    val range = visibleStockIndexRange(count, start, end)
+    if (range.isEmpty()) return -1
+    return (range.first + slot).coerceIn(range.first, range.last)
+}
+
+internal fun toggleAdvancedSelection(current: Int, hit: Int): Int =
+    if (hit < 0 || hit == current) -1 else hit
+
+internal fun formatStockSelection(selection: AdvancedChartSelection): String {
+    selection.summary?.let { return "${selection.label}  $it" }
+    val value = selection.value ?: return selection.label
+    val field = when (selection.kind) {
+        AdvancedChartKind.STOCK_AREA,
+        AdvancedChartKind.STOCK_LINE,
+        AdvancedChartKind.RENKO,
+        AdvancedChartKind.KAGI,
+        -> "价格"
+        AdvancedChartKind.POINT_FIGURE -> "列高"
+        AdvancedChartKind.OHLC -> "收盘"
+        else -> "数值"
+    }
+    return "${selection.label}  $field:$value"
+}
+
+internal fun applyStockInteractionDefaults(
+    attr: AdvancedChartAttr,
+    kind: AdvancedChartKind,
+) {
+    if (!supportsStockViewport(kind)) return
+    attr.interaction.apply {
+        enableLongPressInspect = true
+        enableCrosshair = true
+        enablePan = true
+        enableScale = true
+        enableReset = true
+        clampToData = true
+        minimumVisibleRatio = 0.16f
+        initialVisibleRatio = 0.65f
     }
 }

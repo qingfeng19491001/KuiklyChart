@@ -115,10 +115,45 @@ class ScatterChartAttr : SeriesCartesianChartAttr() {
     var pointRadius: Float = 5f
 }
 
+data class StockAverageLine(
+    val period: Int,
+    val color: Long,
+    val label: String = "MA$period",
+)
+
+class StockMovingAverageConfig {
+    var show: Boolean = false
+    val lines = mutableListOf<StockAverageLine>()
+
+    fun line(period: Int, color: Long, label: String = "MA$period") {
+        require(period > 0) { "period must be positive" }
+        lines += StockAverageLine(period, color, label)
+    }
+}
+
+class StockVolumePanelConfig {
+    var show: Boolean = false
+    var heightRatio: Float = 0.24f
+    val averageLines = mutableListOf<StockAverageLine>()
+
+    fun average(period: Int, color: Long, label: String = "VMA$period") {
+        require(period > 0) { "period must be positive" }
+        averageLines += StockAverageLine(period, color, label)
+    }
+}
+
 class StockChartAttr : CartesianChartAttr() {
     var candleWidthRatio: Float = 0.6f
+    var preset: StockThemePreset = StockThemePreset.LIGHT
+    val movingAverages = StockMovingAverageConfig()
+    val volumePanel = StockVolumePanelConfig()
+
+    fun movingAverages(block: StockMovingAverageConfig.() -> Unit) = movingAverages.apply(block)
+
+    fun volumePanel(block: StockVolumePanelConfig.() -> Unit) = volumePanel.apply(block)
 
     init {
+        interaction.enableLongPressInspect = true
         interaction.enablePan = true
         interaction.enableScale = true
         interaction.enableReset = true

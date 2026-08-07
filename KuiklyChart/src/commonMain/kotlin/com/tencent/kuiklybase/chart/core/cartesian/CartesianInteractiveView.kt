@@ -14,6 +14,7 @@ import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.View
 import com.tencent.kuiklybase.chart.config.CartesianChartAttr
 import com.tencent.kuiklybase.chart.config.CartesianChartEvent
+import com.tencent.kuiklybase.chart.config.ChartTheme
 import com.tencent.kuiklybase.chart.core.toChartColor
 import com.tencent.kuiklybase.chart.model.ChartSelection
 import com.tencent.kuiklybase.chart.model.ChartViewport
@@ -53,6 +54,8 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
 
     protected val config: A
         get() = attr
+
+    protected open fun resolvedTheme(): ChartTheme = attr.theme.resolved()
 
     override fun createEvent() = CartesianChartEvent()
 
@@ -172,10 +175,11 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
         val ctx = this
         return {
             View {
+                val theme = ctx.resolvedTheme()
                 attr {
                     flex(1f)
                     flexDirection(FlexDirection.COLUMN)
-                    backgroundColor(ctx.attr.theme.backgroundColor.toChartColor())
+                    backgroundColor(theme.backgroundColor.toChartColor())
                 }
                 vif({ ctx.attr.title.isNotEmpty() }) {
                     Text {
@@ -183,7 +187,7 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                             text(ctx.attr.title)
                             fontSize(16f)
                             fontWeightSemiBold()
-                            color(ctx.attr.theme.textColor.toChartColor())
+                            color(theme.textColor.toChartColor())
                             marginBottom(4f)
                             marginLeft(12f)
                         }
@@ -210,11 +214,15 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                             ctx.resetViewport()
                         }
                         longPress { params ->
-                            if (!ctx.attr.interaction.enableDragSelect) return@longPress
-                            if (params.state == "start") {
-                                ctx.ensureGestureReady()
-                                ctx.gestureController?.armBrush()
-                                ctx.touchHandler?.beginBrush(params.x)
+                            if (params.state != "start") return@longPress
+                            when (resolveLongPressAction(ctx.attr.interaction)) {
+                                LongPressAction.BRUSH -> {
+                                    ctx.ensureGestureReady()
+                                    ctx.gestureController?.armBrush()
+                                    ctx.touchHandler?.beginBrush(params.x)
+                                }
+                                LongPressAction.INSPECT -> ctx.onPlotClick(params.x, params.y)
+                                LongPressAction.NONE -> Unit
                             }
                         }
                         pan { params ->
@@ -244,7 +252,7 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                         ctx.drawPlot(context, width, height, layout, currentViewport, ctx.selection)
                         CartesianOverlayRenderer.drawBrush(
                             context, layout, currentViewport, ctx.dragSelection,
-                            ctx.attr.theme.primaryColor,
+                            ctx.resolvedTheme().primaryColor,
                         )
                         val selectedCrosshair = ctx.selectionCrosshair(layout, currentViewport)
                         val crosshairX = if (ctx.selection != null) selectedCrosshair?.first else ctx.crosshairX
@@ -255,7 +263,7 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
                             ctx.attr.interaction.enableCrosshair,
                             crosshairX,
                             crosshairY,
-                            ctx.attr.theme.primaryColor,
+                            ctx.resolvedTheme().primaryColor,
                         )
                     }
                 }
@@ -305,6 +313,19 @@ abstract class CartesianInteractiveView<A : CartesianChartAttr> :
 
     protected abstract fun onPlotClick(x: Float, y: Float)
 }
+
+internal enum class LongPressAction {
+    NONE,
+    INSPECT,
+    BRUSH,
+}
+
+internal fun resolveLongPressAction(interaction: com.tencent.kuiklybase.chart.config.ChartInteractionConfig): LongPressAction =
+    when {
+        interaction.enableDragSelect -> LongPressAction.BRUSH
+        interaction.enableLongPressInspect -> LongPressAction.INSPECT
+        else -> LongPressAction.NONE
+    }
 
 internal object CartesianOverlayRenderer {
     fun drawBrush(

@@ -23,6 +23,8 @@ internal fun ViewContainer<*, *>.stockDemoVariantSection(
     chart: ViewBuilder,
 ) = demoVariantSectionContent(index, title, subtitle, chartHeight, chart)
 
+internal fun stockVariantCardHeight(professional: Boolean): Float = if (professional) 356f else 236f
+
 private fun ViewContainer<*, *>.demoVariantSectionContent(
     index: Int,
     title: String,

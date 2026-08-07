@@ -5,6 +5,7 @@ import com.tencent.kuikly.core.views.ContextApi
 import com.tencent.kuikly.core.views.TextAlign
 import com.tencent.kuiklybase.chart.config.ChartAnnotationConfig
 import com.tencent.kuiklybase.chart.config.ChartTheme
+import com.tencent.kuiklybase.chart.config.StockAverageLine
 import com.tencent.kuiklybase.chart.config.ChartThresholdConfig
 import com.tencent.kuiklybase.chart.config.AreaMode
 import com.tencent.kuiklybase.chart.core.cartesian.CartesianLayout
@@ -836,7 +837,8 @@ internal object ChartCanvasRenderer {
         if (points.isEmpty()) return
         val plot = layout.plot
         val scale = CartesianScale(plot, viewport)
-        val slot = plot.width / points.size.coerceAtLeast(1)
+        val visibleCount = points.count { it.x in viewport.xMin..viewport.xMax }.coerceAtLeast(1)
+        val slot = plot.width / visibleCount
         val bodyWidth = slot * candleWidthRatio.coerceIn(0.2f, 0.9f)
         points.forEachIndexed { idx, p ->
             val cx = scale.toPixelX(p.x)
@@ -861,6 +863,80 @@ internal object ChartCanvasRenderer {
             if (selected) {
                 strokeRect(ctx, cx - bodyWidth / 2f, top, bodyWidth, height, fill)
             }
+        }
+    }
+
+    fun drawStockAverageLine(
+        ctx: ContextApi,
+        layout: CartesianLayout,
+        viewport: ChartViewport,
+        points: List<Pair<Float, Float>>,
+        color: Long,
+        theme: ChartTheme,
+    ) {
+        if (points.isEmpty()) return
+        drawLineSeries(
+            ctx = ctx,
+            layout = layout,
+            viewport = viewport,
+            series = listOf(
+                ChartSeries(
+                    name = "",
+                    color = color,
+                    points = points.map { (x, y) -> ChartDataPoint("", x, y) },
+                ),
+            ),
+            theme = theme,
+            selection = null,
+            showPoints = false,
+        )
+    }
+
+    fun drawStockVolumes(
+        ctx: ContextApi,
+        layout: CartesianLayout,
+        viewport: ChartViewport,
+        points: List<OhlcPoint>,
+        candleWidthRatio: Float,
+        theme: ChartTheme,
+    ) {
+        val maximum = viewport.yMax.coerceAtLeast(1f)
+        val scale = CartesianScale(layout.plot, viewport)
+        val visibleCount = points.count { it.x in viewport.xMin..viewport.xMax }.coerceAtLeast(1)
+        val bodyWidth = layout.plot.width / visibleCount * candleWidthRatio.coerceIn(0.2f, 0.9f)
+        points.forEach { point ->
+            val volume = point.volume ?: return@forEach
+            val x = scale.toPixelX(point.x)
+            if (x < layout.plot.left - bodyWidth || x > layout.plot.right + bodyWidth) return@forEach
+            val top = scale.toPixelY(volume.coerceIn(0f, maximum))
+            val color = if (point.close >= point.open) theme.upColor else theme.downColor
+            ctx.fillStyle(color.toChartColor())
+            ctx.fillRect(
+                x - bodyWidth / 2f,
+                top,
+                bodyWidth,
+                (layout.plot.bottom - top).coerceAtLeast(1f),
+            )
+        }
+    }
+
+    fun drawStockLegend(
+        ctx: ContextApi,
+        left: Float,
+        baseline: Float,
+        lines: List<StockAverageLine>,
+        values: Map<Int, Float?>,
+        theme: ChartTheme,
+    ) {
+        var x = left
+        ctx.font(theme.fontSize)
+        ctx.textAlign(TextAlign.LEFT)
+        lines.forEach { line ->
+            val value = values[line.period]
+            val text = if (value == null) line.label else "${line.label}:${formatValue(value)}"
+            ctx.fillStyle(line.color.toChartColor())
+            ctx.fillText(text, x, baseline)
+            x += text.length * theme.fontSize * 0.58f + 12f
         }
     }
 

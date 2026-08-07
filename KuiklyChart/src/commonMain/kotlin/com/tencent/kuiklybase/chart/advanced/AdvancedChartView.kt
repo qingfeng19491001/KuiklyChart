@@ -13,6 +13,8 @@ import com.tencent.kuikly.core.views.Text
 import com.tencent.kuikly.core.views.TextAlign
 import com.tencent.kuikly.core.views.View
 import com.tencent.kuiklybase.chart.config.ChartTheme
+import com.tencent.kuiklybase.chart.config.StockThemePreset
+import com.tencent.kuiklybase.chart.config.resolveStockTheme
 import com.tencent.kuiklybase.chart.core.withAlpha
 import com.tencent.kuiklybase.chart.model.ChartDataPoint
 import com.tencent.kuiklybase.chart.model.ChartSlice
@@ -83,7 +85,13 @@ internal sealed interface AdvancedChartData {
     data class Ohlc(val items: List<OhlcPoint>) : AdvancedChartData {
         override val size get() = items.size
         override fun selection(index: Int) = items.getOrNull(index)?.let {
-            AdvancedChartSelection(AdvancedChartKind.OHLC, index, it.label, it.close)
+            AdvancedChartSelection(
+                AdvancedChartKind.OHLC,
+                index,
+                it.label,
+                it.close,
+                "O:${it.open} H:${it.high} L:${it.low} C:${it.close}",
+            )
         }
     }
 
@@ -100,7 +108,13 @@ internal sealed interface AdvancedChartData {
     data class PointFigure(val items: List<PointFigureColumn>) : AdvancedChartData {
         override val size get() = items.size
         override fun selection(index: Int) = items.getOrNull(index)?.let {
-            AdvancedChartSelection(AdvancedChartKind.POINT_FIGURE, index, it.label, it.count.toFloat())
+            AdvancedChartSelection(
+                AdvancedChartKind.POINT_FIGURE,
+                index,
+                it.label,
+                it.count.toFloat(),
+                "${if (it.rising) "X" else "O"}列  列高:${it.count}",
+            )
         }
     }
 }
@@ -121,18 +135,27 @@ class AdvancedChartView internal constructor(
     private var pinchEnd = 1f
     private var pinching = false
     private var viewportInitialized = false
+    private var tooltipOnLeft by observable(false)
 
     override fun createAttr() = AdvancedChartAttr()
     override fun createEvent() = AdvancedChartEvent()
 
-    private fun supportsViewport() = kind == AdvancedChartKind.STOCK_AREA ||
-        kind == AdvancedChartKind.STOCK_LINE || kind == AdvancedChartKind.KAGI
+    private fun supportsViewport() = supportsStockViewport(kind)
+
+    private fun resolvedTheme(): ChartTheme = if (supportsViewport()) {
+        resolveStockTheme(attr.theme, attr.preset)
+    } else {
+        attr.theme.resolved()
+    }
 
     private fun updateViewport(start: Float, end: Float) {
-        val span = (end - start).coerceIn(0.16f, 1f)
-        val nextStart = start.coerceIn(0f, 1f - span)
-        viewportStart = nextStart
-        viewportEnd = nextStart + span
+        val normalized = normalizeStockViewport(
+            start,
+            end,
+            attr.interaction.minimumVisibleRatio,
+        )
+        viewportStart = normalized.start
+        viewportEnd = normalized.endInclusive
         event.onViewportChange?.invoke(viewportStart, viewportEnd)
     }
 
@@ -141,30 +164,39 @@ class AdvancedChartView internal constructor(
         updateViewport(1f - ratio, 1f)
         selectedIndex = -1
         tooltip = ""
+        event.onSelectionChange?.invoke(null)
+    }
+
+    private fun inspectAt(x: Float, y: Float) {
+        val data = dataProvider()
+        val hit = AdvancedChartRenderer.hitTest(
+            kind, data, x, y, canvasWidth, canvasHeight, viewportStart, viewportEnd,
+        )
+        selectedIndex = toggleAdvancedSelection(selectedIndex, hit)
+        val selection = data.selection(selectedIndex)
+        tooltip = selection?.let(::formatStockSelection).orEmpty()
+        tooltipOnLeft = x > canvasWidth / 2f
+        event.onSelectionChange?.invoke(selection)
+        if (selection != null) event.onItemClick?.invoke(selection)
     }
 
     override fun body(): ViewBuilder {
         val chart = this
         return {
             View {
+                val theme = chart.resolvedTheme()
                 attr {
                     flex(1f)
-                    backgroundColor(chart.attr.theme.backgroundColor.toChartColor())
+                    backgroundColor(theme.backgroundColor.toChartColor())
                 }
                 event {
                     click { params ->
                         if (!chart.attr.interaction.enableTap) return@click
-                        val data = chart.dataProvider()
-                        val index = AdvancedChartRenderer.hitTest(
-                            chart.kind, data, params.x, params.y, chart.canvasWidth, chart.canvasHeight,
-                            chart.viewportStart, chart.viewportEnd,
-                        )
-                        chart.selectedIndex = if (index == chart.selectedIndex) -1 else index
-                        val selection = data.selection(chart.selectedIndex)
-                        chart.tooltip = selection?.let { item ->
-                            item.value?.let { "${item.label}: $it" } ?: item.label
-                        }.orEmpty()
-                        if (selection != null) chart.event.onItemClick?.invoke(selection)
+                        chart.inspectAt(params.x, params.y)
+                    }
+                    longPress { params ->
+                        if (!chart.attr.interaction.enableLongPressInspect || params.state != "start") return@longPress
+                        chart.inspectAt(params.x, params.y)
                     }
                     doubleClick {
                         if (chart.supportsViewport() && chart.attr.interaction.enableReset) chart.resetViewport()
@@ -196,7 +228,10 @@ class AdvancedChartView internal constructor(
                         val b = params.touches[1]
                         val factor = hypot(a.x - b.x, a.y - b.y).coerceAtLeast(1f) / chart.pinchStartDistance
                         val oldSpan = chart.pinchEnd - chart.pinchStart
-                        val newSpan = (oldSpan / factor).coerceIn(0.16f, 1f)
+                        val newSpan = (oldSpan / factor).coerceIn(
+                            chart.attr.interaction.minimumVisibleRatio,
+                            1f,
+                        )
                         val focalRatio = (((a.x + b.x) / 2f - 34f) / (chart.canvasWidth - 46f).coerceAtLeast(1f))
                             .coerceIn(0f, 1f)
                         val focalData = chart.pinchStart + oldSpan * focalRatio
@@ -209,12 +244,16 @@ class AdvancedChartView internal constructor(
                     chart.canvasHeight = height
                     if (!chart.viewportInitialized) {
                         chart.viewportInitialized = true
-                        val ratio = chart.attr.interaction.initialVisibleRatio.coerceIn(0.16f, 1f)
+                        val ratio = chart.attr.interaction.initialVisibleRatio.coerceIn(
+                            chart.attr.interaction.minimumVisibleRatio,
+                            1f,
+                        )
                         chart.viewportStart = 1f - ratio
                     }
                     AdvancedChartRenderer.draw(
-                        context, width, height, chart.kind, chart.dataProvider(), chart.attr.theme.resolved(),
+                        context, width, height, chart.kind, chart.dataProvider(), chart.resolvedTheme(),
                         chart.selectedIndex, chart.viewportStart, chart.viewportEnd,
+                        chart.attr.interaction.enableCrosshair,
                     )
                 }
                 vif({ chart.tooltip.isNotEmpty() }) {
@@ -222,10 +261,19 @@ class AdvancedChartView internal constructor(
                         attr {
                             positionAbsolute()
                             top(8f)
-                            right(8f)
+                            left(if (chart.tooltipOnLeft) 8f else (chart.canvasWidth - 150f).coerceAtLeast(8f))
+                            width(142f)
                             padding(7f, 9f, 7f, 9f)
                             borderRadius(6f)
-                            backgroundColor(Color(0xE62C3542))
+                            backgroundColor(
+                                Color(
+                                    if (chart.attr.preset == StockThemePreset.DARK) {
+                                        0xF02C3542
+                                    } else {
+                                        0xEE1F2937
+                                    },
+                                ),
+                            )
                         }
                         Text {
                             attr {
@@ -250,15 +298,10 @@ private fun ViewContainer<*, *>.advancedChart(
     init: AdvancedChartView.() -> Unit,
 ) {
     addChild(AdvancedChartView(kind, provider)) {
-        if (viewport) {
-            attr {
-                interaction {
-                    enablePan = true
-                    enableScale = true
-                    enableReset = true
-                    initialVisibleRatio = 0.65f
-                }
-            }
+        if (supportsStockViewport(kind)) {
+            attr { applyStockInteractionDefaults(this, kind) }
+        } else if (viewport) {
+            attr { interaction { initialVisibleRatio = 0.65f } }
         }
         init()
     }
@@ -317,6 +360,7 @@ private object AdvancedChartRenderer {
         selected: Int,
         viewportStart: Float,
         viewportEnd: Float,
+        showCrosshair: Boolean,
     ) {
         when (kind) {
             AdvancedChartKind.DUAL_AXIS_BAR -> drawDualAxis(ctx, width, height, (data as AdvancedChartData.DualAxis).items, theme, selected)
@@ -327,14 +371,27 @@ private object AdvancedChartRenderer {
             AdvancedChartKind.ROSE -> drawRose(ctx, width, height, (data as AdvancedChartData.Slices).items, theme, selected)
             AdvancedChartKind.SUNBURST -> drawSunburst(ctx, width, height, (data as AdvancedChartData.Sunburst).items, theme, selected)
             AdvancedChartKind.NESTED_PIE -> drawNestedPie(ctx, width, height, (data as AdvancedChartData.NestedPie).items, theme, selected)
-            AdvancedChartKind.OHLC -> drawOhlc(ctx, width, height, (data as AdvancedChartData.Ohlc).items, theme, selected)
+            AdvancedChartKind.OHLC -> drawOhlc(
+                ctx, width, height, (data as AdvancedChartData.Ohlc).items, theme, selected,
+                viewportStart, viewportEnd, showCrosshair,
+            )
             AdvancedChartKind.STOCK_AREA, AdvancedChartKind.STOCK_LINE -> drawStock(
                 ctx, width, height, (data as AdvancedChartData.Points).items, theme, selected,
                 viewportStart, viewportEnd, area = kind == AdvancedChartKind.STOCK_AREA,
+                showCrosshair = showCrosshair,
             )
-            AdvancedChartKind.RENKO -> drawRenko(ctx, width, height, (data as AdvancedChartData.Points).items, theme, selected)
-            AdvancedChartKind.KAGI -> drawKagi(ctx, width, height, (data as AdvancedChartData.Points).items, theme, selected, viewportStart, viewportEnd)
-            AdvancedChartKind.POINT_FIGURE -> drawPointFigure(ctx, width, height, (data as AdvancedChartData.PointFigure).items, theme, selected)
+            AdvancedChartKind.RENKO -> drawRenko(
+                ctx, width, height, (data as AdvancedChartData.Points).items, theme, selected,
+                viewportStart, viewportEnd, showCrosshair,
+            )
+            AdvancedChartKind.KAGI -> drawKagi(
+                ctx, width, height, (data as AdvancedChartData.Points).items, theme, selected,
+                viewportStart, viewportEnd, showCrosshair,
+            )
+            AdvancedChartKind.POINT_FIGURE -> drawPointFigure(
+                ctx, width, height, (data as AdvancedChartData.PointFigure).items, theme, selected,
+                viewportStart, viewportEnd, showCrosshair,
+            )
         }
     }
 
@@ -356,10 +413,19 @@ private object AdvancedChartRenderer {
             AdvancedChartKind.NESTED_PIE -> nestedPieIndex(x, y, width, height, (data as AdvancedChartData.NestedPie).items)
             AdvancedChartKind.BULLET ->
                 ((y - 20f) / ((height - 32f) / data.size.coerceAtLeast(1))).toInt().coerceIn(0, data.size - 1)
-            AdvancedChartKind.STOCK_AREA, AdvancedChartKind.STOCK_LINE, AdvancedChartKind.KAGI -> {
+            AdvancedChartKind.OHLC,
+            AdvancedChartKind.STOCK_AREA,
+            AdvancedChartKind.STOCK_LINE,
+            AdvancedChartKind.RENKO,
+            AdvancedChartKind.KAGI,
+            AdvancedChartKind.POINT_FIGURE,
+            -> {
+                if (x !in 34f..(width - 12f) || y !in 12f..(height - 30f)) return -1
                 val ratio = ((x - 34f) / (width - 46f).coerceAtLeast(1f)).coerceIn(0f, 1f)
-                ((viewportStart + (viewportEnd - viewportStart) * ratio) * (data.size - 1)).toInt()
-                    .coerceIn(0, data.size - 1)
+                val range = visibleStockIndexRange(data.size, viewportStart, viewportEnd)
+                if (range.isEmpty()) return -1
+                val slot = (ratio * range.count()).toInt().coerceIn(0, range.count() - 1)
+                sourceIndexForVisibleSlot(slot, data.size, viewportStart, viewportEnd)
             }
             else -> (((x - 34f) / (width - 46f).coerceAtLeast(1f)) * data.size).toInt().coerceIn(0, data.size - 1)
         }
@@ -599,23 +665,51 @@ private object AdvancedChartRenderer {
         }
     }
 
-    private fun drawOhlc(ctx: ContextApi, width: Float, height: Float, items: List<OhlcPoint>, theme: ChartTheme, selected: Int) {
+    private fun drawOhlc(
+        ctx: ContextApi,
+        width: Float,
+        height: Float,
+        items: List<OhlcPoint>,
+        theme: ChartTheme,
+        selected: Int,
+        viewportStart: Float,
+        viewportEnd: Float,
+        showCrosshair: Boolean,
+    ) {
         if (items.isEmpty()) return
         val plot = axes(ctx, width, height, theme)
-        val min = items.minOf { it.low }; val max = items.maxOf { it.high }; val range = (max - min).coerceAtLeast(1f); val slot = plot.width / items.size
-        items.forEachIndexed { index, item ->
-            val x = plot.left + slot * (index + 0.5f)
+        val visibleRange = visibleStockIndexRange(items.size, viewportStart, viewportEnd)
+        val visible = visibleRange.map { index -> index to items[index] }
+        val min = visible.minOf { it.second.low }
+        val max = visible.maxOf { it.second.high }
+        val range = (max - min).coerceAtLeast(1f)
+        val slot = plot.width / visible.size.coerceAtLeast(1)
+        visible.forEachIndexed { slotIndex, (sourceIndex, item) ->
+            val x = plot.left + slot * (slotIndex + 0.5f)
             fun y(value: Float) = plot.bottom - plot.height * (value - min) / range
-            ctx.strokeStyle((if (index == selected) 0xFFFA8C16 else if (item.close >= item.open) theme.upColor else theme.downColor).toChartColor())
-            ctx.lineWidth(if (index == selected) 3f else 1.5f); ctx.beginPath()
-            ctx.moveTo(x, y(item.high)); ctx.lineTo(x, y(item.low)); ctx.moveTo(x - slot * 0.28f, y(item.open)); ctx.lineTo(x, y(item.open))
-            ctx.moveTo(x, y(item.close)); ctx.lineTo(x + slot * 0.28f, y(item.close)); ctx.stroke()
+            ctx.strokeStyle(
+                (if (sourceIndex == selected) 0xFFFA8C16 else if (item.close >= item.open) theme.upColor else theme.downColor)
+                    .toChartColor(),
+            )
+            ctx.lineWidth(if (sourceIndex == selected) 3f else 1.5f)
+            ctx.beginPath()
+            ctx.moveTo(x, y(item.high))
+            ctx.lineTo(x, y(item.low))
+            ctx.moveTo(x - slot * 0.28f, y(item.open))
+            ctx.lineTo(x, y(item.open))
+            ctx.moveTo(x, y(item.close))
+            ctx.lineTo(x + slot * 0.28f, y(item.close))
+            ctx.stroke()
+            if (showCrosshair && sourceIndex == selected) {
+                drawVerticalGuide(ctx, plot, x, theme.primaryColor)
+                drawHorizontalGuide(ctx, plot, y(item.close), theme.primaryColor)
+            }
         }
-        drawLabels(ctx, plot, items.map { it.label }, theme)
+        drawLabels(ctx, plot, visible.map { it.second.label }, theme)
     }
 
     private fun drawStock(ctx: ContextApi, width: Float, height: Float, items: List<ChartDataPoint>, theme: ChartTheme, selected: Int,
-        viewportStart: Float, viewportEnd: Float, area: Boolean) {
+        viewportStart: Float, viewportEnd: Float, area: Boolean, showCrosshair: Boolean) {
         if (items.isEmpty()) return
         val plot = axes(ctx, width, height, theme); val visible = visiblePoints(items, viewportStart, viewportEnd)
         val rawMin = visible.minOf { it.y }; val rawMax = visible.maxOf { it.y }; val pad = (rawMax - rawMin).coerceAtLeast(1f) * 0.12f
@@ -630,25 +724,48 @@ private object AdvancedChartRenderer {
             }
             ctx.beginPath(); ctx.strokeStyle(theme.primaryColor.toChartColor()); ctx.lineWidth(theme.lineWidth)
             points.forEachIndexed { index, point -> if (index == 0) ctx.moveTo(point.first, point.second) else ctx.lineTo(point.first, point.second) }; ctx.stroke()
-            drawSelectedGuide(ctx, plot, selected, items.size, viewportStart, viewportEnd)
+            if (showCrosshair) {
+                drawSelectedGuide(ctx, plot, selected, items.size, viewportStart, viewportEnd, theme.primaryColor)
+                items.getOrNull(selected)?.let { item ->
+                    drawHorizontalGuide(
+                        ctx,
+                        plot,
+                        plot.bottom - plot.height * (item.y - min) / (max - min).coerceAtLeast(1f),
+                        theme.primaryColor,
+                    )
+                }
+            }
         }
+        val labelRange = visibleStockIndexRange(items.size, viewportStart, viewportEnd)
+        drawLabels(ctx, plot, labelRange.map { items[it].label }, theme)
     }
 
-    private fun drawRenko(ctx: ContextApi, width: Float, height: Float, items: List<ChartDataPoint>, theme: ChartTheme, selected: Int) {
+    private fun drawRenko(
+        ctx: ContextApi, width: Float, height: Float, items: List<ChartDataPoint>, theme: ChartTheme,
+        selected: Int, viewportStart: Float, viewportEnd: Float, showCrosshair: Boolean,
+    ) {
         if (items.isEmpty()) return
-        val plot = axes(ctx, width, height, theme); val min = items.minOf { it.y }; val max = items.maxOf { it.y }; val range = (max - min + 1f).coerceAtLeast(1f)
-        val slot = plot.width / items.size; val brickHeight = plot.height / range
-        items.forEachIndexed { index, item ->
-            val up = index == 0 || item.y >= items[index - 1].y
+        val plot = axes(ctx, width, height, theme)
+        val visibleRange = visibleStockIndexRange(items.size, viewportStart, viewportEnd)
+        val visible = visibleRange.map { index -> index to items[index] }
+        val min = visible.minOf { it.second.y }; val max = visible.maxOf { it.second.y }; val range = (max - min + 1f).coerceAtLeast(1f)
+        val slot = plot.width / visible.size.coerceAtLeast(1); val brickHeight = plot.height / range
+        visible.forEachIndexed { slotIndex, (sourceIndex, item) ->
+            val up = sourceIndex == 0 || item.y >= items[sourceIndex - 1].y
             val top = plot.bottom - brickHeight * (item.y - min + 1f)
-            ctx.fillStyle((if (index == selected) 0xFFFA8C16 else if (up) theme.upColor else theme.downColor).toChartColor())
-            ctx.fillRectPath(plot.left + slot * index + 1f, top, (slot - 2f).coerceAtLeast(1f), brickHeight.coerceAtLeast(2f) - 2f)
+            val x = plot.left + slot * slotIndex
+            ctx.fillStyle((if (sourceIndex == selected) 0xFFFA8C16 else if (up) theme.upColor else theme.downColor).toChartColor())
+            ctx.fillRectPath(x + 1f, top, (slot - 2f).coerceAtLeast(1f), brickHeight.coerceAtLeast(2f) - 2f)
+            if (showCrosshair && sourceIndex == selected) {
+                drawVerticalGuide(ctx, plot, x + slot / 2f, theme.primaryColor)
+                drawHorizontalGuide(ctx, plot, top + brickHeight / 2f, theme.primaryColor)
+            }
         }
-        drawLabels(ctx, plot, items.map { it.label }, theme)
+        drawLabels(ctx, plot, visible.map { it.second.label }, theme)
     }
 
     private fun drawKagi(ctx: ContextApi, width: Float, height: Float, items: List<ChartDataPoint>, theme: ChartTheme, selected: Int,
-        viewportStart: Float, viewportEnd: Float) {
+        viewportStart: Float, viewportEnd: Float, showCrosshair: Boolean) {
         if (items.size < 2) return
         val plot = axes(ctx, width, height, theme); val visible = visiblePoints(items, viewportStart, viewportEnd)
         val min = visible.minOf { it.y }; val max = visible.maxOf { it.y }; val range = (max - min).coerceAtLeast(1f)
@@ -663,33 +780,88 @@ private object AdvancedChartRenderer {
                 ctx.lineWidth(if (rising) theme.lineWidth + 1.5f else theme.lineWidth); ctx.beginPath()
                 ctx.moveTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.stroke()
             }
-            drawSelectedGuide(ctx, plot, selected, items.size, viewportStart, viewportEnd)
-        }
-    }
-
-    private fun drawPointFigure(ctx: ContextApi, width: Float, height: Float, items: List<PointFigureColumn>, theme: ChartTheme, selected: Int) {
-        if (items.isEmpty()) return
-        val plot = axes(ctx, width, height, theme); val maxCount = items.maxOf { it.count }.coerceAtLeast(1); val slot = plot.width / items.size
-        ctx.font((plot.height / (maxCount + 1)).coerceIn(12f, 18f)); ctx.textAlign(TextAlign.CENTER)
-        items.forEachIndexed { index, item ->
-            ctx.fillStyle((if (index == selected) 0xFFFA8C16 else if (item.rising) theme.upColor else theme.downColor).toChartColor())
-            repeat(item.count.coerceAtLeast(0)) { row ->
-                ctx.fillText(if (item.rising) "X" else "O", plot.left + slot * (index + 0.5f), plot.bottom - 12f - row * 18f)
+            if (showCrosshair) {
+                drawSelectedGuide(ctx, plot, selected, items.size, viewportStart, viewportEnd, theme.primaryColor)
+                items.getOrNull(selected)?.let { item ->
+                    drawHorizontalGuide(
+                        ctx,
+                        plot,
+                        plot.bottom - plot.height * (item.y - min) / range,
+                        theme.primaryColor,
+                    )
+                }
             }
         }
-        drawLabels(ctx, plot, items.map { it.label }, theme)
+        val labelRange = visibleStockIndexRange(items.size, viewportStart, viewportEnd)
+        drawLabels(ctx, plot, labelRange.map { items[it].label }, theme)
     }
 
-    private fun drawSelectedGuide(ctx: ContextApi, plot: Plot, selected: Int, count: Int, start: Float, end: Float) {
+    private fun drawPointFigure(
+        ctx: ContextApi, width: Float, height: Float, items: List<PointFigureColumn>, theme: ChartTheme,
+        selected: Int, viewportStart: Float, viewportEnd: Float, showCrosshair: Boolean,
+    ) {
+        if (items.isEmpty()) return
+        val plot = axes(ctx, width, height, theme)
+        val visibleRange = visibleStockIndexRange(items.size, viewportStart, viewportEnd)
+        val visible = visibleRange.map { index -> index to items[index] }
+        val maxCount = visible.maxOf { it.second.count }.coerceAtLeast(1); val slot = plot.width / visible.size.coerceAtLeast(1)
+        ctx.font((plot.height / (maxCount + 1)).coerceIn(12f, 18f)); ctx.textAlign(TextAlign.CENTER)
+        visible.forEachIndexed { slotIndex, (sourceIndex, item) ->
+            val x = plot.left + slot * (slotIndex + 0.5f)
+            ctx.fillStyle((if (sourceIndex == selected) 0xFFFA8C16 else if (item.rising) theme.upColor else theme.downColor).toChartColor())
+            repeat(item.count.coerceAtLeast(0)) { row ->
+                ctx.fillText(if (item.rising) "X" else "O", x, plot.bottom - 12f - row * 18f)
+            }
+            if (showCrosshair && sourceIndex == selected) {
+                drawVerticalGuide(ctx, plot, x, theme.primaryColor)
+            }
+        }
+        drawLabels(ctx, plot, visible.map { it.second.label }, theme)
+    }
+
+    private fun drawSelectedGuide(
+        ctx: ContextApi,
+        plot: Plot,
+        selected: Int,
+        count: Int,
+        start: Float,
+        end: Float,
+        color: Long,
+    ) {
         if (selected !in 0 until count) return
         val x = viewportX(plot, selected / (count - 1f).coerceAtLeast(1f), start, end)
         if (x !in plot.left..plot.right) return
-        ctx.setLineDash(listOf(3f, 3f)); ctx.strokeStyle(0x991677FF.toChartColor()); ctx.lineWidth(1f)
-        ctx.beginPath(); ctx.moveTo(x, plot.top); ctx.lineTo(x, plot.bottom); ctx.stroke(); ctx.setLineDash(emptyList())
+        drawVerticalGuide(ctx, plot, x, color)
     }
 
-    private fun visiblePoints(items: List<ChartDataPoint>, start: Float, end: Float): List<ChartDataPoint> =
-        items.filterIndexed { index, _ -> index / (items.size - 1f).coerceAtLeast(1f) in start..end }.ifEmpty { items }
+    private fun drawVerticalGuide(ctx: ContextApi, plot: Plot, x: Float, color: Long) {
+        ctx.setLineDash(listOf(3f, 3f))
+        ctx.strokeStyle(Color(color.withAlpha(0x99)))
+        ctx.lineWidth(1f)
+        ctx.beginPath()
+        ctx.moveTo(x, plot.top)
+        ctx.lineTo(x, plot.bottom)
+        ctx.stroke()
+        ctx.setLineDash(emptyList())
+    }
+
+    private fun drawHorizontalGuide(ctx: ContextApi, plot: Plot, y: Float, color: Long) {
+        if (y !in plot.top..plot.bottom) return
+        ctx.setLineDash(listOf(3f, 3f))
+        ctx.strokeStyle(Color(color.withAlpha(0x99)))
+        ctx.lineWidth(1f)
+        ctx.beginPath()
+        ctx.moveTo(plot.left, y)
+        ctx.lineTo(plot.right, y)
+        ctx.stroke()
+        ctx.setLineDash(emptyList())
+    }
+
+    private fun visiblePoints(items: List<ChartDataPoint>, start: Float, end: Float): List<ChartDataPoint> {
+        if (items.isEmpty()) return emptyList()
+        val range = visibleStockIndexRange(items.size, start, end)
+        return range.map(items::get)
+    }
 
     private fun viewportX(plot: Plot, ratio: Float, start: Float, end: Float) =
         plot.left + plot.width * (ratio - start) / (end - start).coerceAtLeast(0.0001f)

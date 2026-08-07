@@ -12,6 +12,12 @@ class ChartComponentContractsTest {
     fun stockChart_defaultsToHorizontalTimeSeriesInteraction() {
         val attr = StockChartAttr()
 
+        assertEquals(StockThemePreset.LIGHT, attr.preset)
+        assertFalse(attr.movingAverages.show)
+        assertTrue(attr.movingAverages.lines.isEmpty())
+        assertFalse(attr.volumePanel.show)
+        assertTrue(attr.volumePanel.averageLines.isEmpty())
+        assertTrue(attr.interaction.enableLongPressInspect)
         assertTrue(attr.interaction.enablePan)
         assertTrue(attr.interaction.enableScale)
         assertTrue(attr.interaction.enableReset)
@@ -19,6 +25,39 @@ class ChartComponentContractsTest {
         assertFalse(attr.interaction.clampToData)
         assertEquals(0.55f, attr.interaction.initialVisibleRatio)
         assertEquals(VisibleAnchor.END, attr.interaction.initialVisibleAnchor)
+    }
+
+    @Test
+    fun stockChart_indicatorDslCollectsLines() {
+        val attr = StockChartAttr().apply {
+            movingAverages {
+                show = true
+                line(5, 0xFF262626)
+                line(10, 0xFFFAAD14, "MA10")
+            }
+            volumePanel {
+                show = true
+                heightRatio = 0.26f
+                average(5, 0xFF595959)
+            }
+        }
+
+        assertEquals(listOf(5, 10), attr.movingAverages.lines.map { it.period })
+        assertEquals("MA10", attr.movingAverages.lines.last().label)
+        assertEquals(0.26f, attr.volumePanel.heightRatio)
+        assertEquals(5, attr.volumePanel.averageLines.single().period)
+    }
+
+    @Test
+    fun darkStockPreset_resolvesBrokerPaletteAndCustomOverrides() {
+        val options = ChartThemeOptions()
+        val dark = resolveStockTheme(options, StockThemePreset.DARK)
+        assertEquals(0xFF101620, dark.backgroundColor)
+        assertEquals(0xFFE15A5A, dark.upColor)
+        assertEquals(0xFF28AD78, dark.downColor)
+
+        options.primaryColor = 0xFF8B5CF6
+        assertEquals(0xFF8B5CF6, resolveStockTheme(options, StockThemePreset.DARK).primaryColor)
     }
 
     @Test
